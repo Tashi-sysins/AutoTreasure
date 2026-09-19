@@ -1,4 +1,4 @@
-using AutoTreasure.Helpers;
+﻿using AutoTreasure.Helpers;
 using ECommons.DalamudServices;
 using ECommons.Automation;
 using ECommons.Throttlers;
@@ -45,7 +45,7 @@ internal static unsafe class ActionHelper
     /// AutoDuty が使っている呼び方に合わせた。
     /// extraParam に 65535 を渡すのは「HQ でない方を使う」という意味。
     /// </summary>
-    internal static void UseItem(uint itemId)
+    internal static void UseItem(uint itemId, bool contextMenuOnly = false)
     {
         try
         {
@@ -75,8 +75,15 @@ internal static unsafe class ActionHelper
                     if (slot == null || slot->ItemId != itemId)
                         continue;
 
-                    // まず普通に使ってみる。薬や食事はこれで通る。
-                    var result = agent->UseItem(itemId, type, (uint)i, 0);
+                    // <b>地図は「使う」では通らない。試さずに一覧を開く。</b>
+                    //
+                    // 以前はまず UseItem を呼び、失敗（result == 0）してから
+                    // 右クリックの一覧を開いていた。
+                    // その失敗した一瞬に<b>別のサブメニューが開いて見えた</b>
+                    // （実測 2026-09-19・約1秒表示されてから地図が使われる）。
+                    //
+                    // 通らないと分かっているものを試す意味はない。
+                    var result = contextMenuOnly ? 0 : agent->UseItem(itemId, type, (uint)i, 0);
 
                     if (result == 0)
                     {
@@ -159,7 +166,9 @@ internal static unsafe class ActionHelper
         if (!EzThrottler.Throttle("AutoTreasure.UseMap", 3000))
             return false;
 
-        UseItem(GameSnapshot.MapS5ItemId);
+        // 地図は右クリックの一覧から「解読する」を選ぶ形。
+        // 「使う」は通らないので、最初から一覧を開く。
+        UseItem(GameSnapshot.MapS5ItemId, contextMenuOnly: true);
         return true;
     }
 

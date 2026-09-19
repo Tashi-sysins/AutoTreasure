@@ -63,6 +63,8 @@ internal sealed class MainWindow : Window
         ImGui.Spacing();
         DrawRole();
         ImGui.Spacing();
+        DrawSettingsBar();
+        ImGui.Spacing();
         DrawRecording();
         ImGui.Spacing();
         DrawDebugSettings(Plugin.Config);
@@ -384,13 +386,37 @@ internal sealed class MainWindow : Window
     }
 
     /// <summary>
-    /// ふだん使う設定。
+    /// ふだん使う設定をまとめたバー。
     ///
-    /// 「設定」の折りたたみは無くした。
-    /// ロットの設定がその中に隠れてしまい、
-    /// LazyLoot を入れていない人が設定場所を見つけられないため。
-    /// ロットは操作ボタンのすぐ下へ移し、残りはここに置いてある。
+    /// <b>リーダーにだけ出す。</b>
+    /// ここに並ぶのは、どれも<b>リーダーが決めればよいもの</b>。
+    ///   ・画面右上の表示 … 見た目の好みだが、揃っている方が分かりやすい
+    ///   ・連続周回        … 次の周回を始めるのはリーダーだけ
+    ///                      （メンバーは合図を待つので、切っても入れても動きが変わらない）
+    ///   ・待つ秒数        … 同上
+    ///
+    /// メンバーに出しても触る意味がなく、迷いのもとにしかならないので隠す。
+    ///
+    /// 以前は「デバッグ」の中に入れていたが、
+    /// ふだん使う設定をデバッグの奥に置くのは筋が悪い。表に出した。
     /// </summary>
+    private void DrawSettingsBar()
+    {
+        var cfg = Plugin.Config;
+
+        // メンバーには出さない。
+        if (cfg.Role == ClientRole.Member)
+            return;
+
+        if (!ImGui.CollapsingHeader("設定"))
+            return;
+
+        ImGui.Indent();
+        DrawCommonSettings();
+        ImGui.Unindent();
+    }
+
+    /// <summary>設定バーの中身。</summary>
     private void DrawCommonSettings()
     {
         var cfg = Plugin.Config;
@@ -417,37 +443,31 @@ internal sealed class MainWindow : Window
 
         // 1周終わったら続けるか。
         //
-        // <b>メンバーには出さない。</b>
-        // 次の周回を始めるのはリーダーだけで、メンバーは合図を待つ
-        // （TickCompleted はメンバーなら何もせずに返る）。
-        // 切っても入れても動きが変わらない設定は、迷いのもとにしかならない。
-        if (cfg.Role != ClientRole.Member)
+        // このバー自体をリーダーにしか出していないので、
+        // ここで役割を確かめ直す必要はない。
+        var continuous = cfg.ContinuousRuns;
+        if (ImGui.Checkbox("1周終わったら続けて次を始める", ref continuous))
         {
-            var continuous = cfg.ContinuousRuns;
-            if (ImGui.Checkbox("1周終わったら続けて次を始める", ref continuous))
-            {
-                cfg.ContinuousRuns = continuous;
-                cfg.Save();
-            }
-            if (ImGui.IsItemHovered())
-            {
-                ImGui.SetTooltip(
-                    "地図がある限り回り続ける。\n"
-                    + "地図が無くなったら自動で止まる。");
-            }
-
-            if (continuous)
-            {
-                var delay = cfg.ContinuousRunDelaySeconds;
-                ImGui.SetNextItemWidth(120f);
-                if (ImGui.InputFloat("次の周回まで待つ秒数", ref delay, 1f, 5f, "%.0f"))
-                {
-                    cfg.ContinuousRunDelaySeconds = Math.Clamp(delay, 0f, 120f);
-                    cfg.Save();
-                }
-            }
+            cfg.ContinuousRuns = continuous;
+            cfg.Save();
+        }
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip(
+                "地図がある限り回り続ける。\n"
+                + "地図が無くなったら自動で止まる。");
         }
 
+        if (continuous)
+        {
+            var delay = cfg.ContinuousRunDelaySeconds;
+            ImGui.SetNextItemWidth(120f);
+            if (ImGui.InputFloat("次の周回まで待つ秒数", ref delay, 1f, 5f, "%.0f"))
+            {
+                cfg.ContinuousRunDelaySeconds = Math.Clamp(delay, 0f, 120f);
+                cfg.Save();
+            }
+        }
     }
 
     /// <summary>
@@ -789,14 +809,10 @@ internal sealed class MainWindow : Window
         {
             ImGui.Indent();
 
-            // ふだん使う設定も、ここにまとめてある。
-            // 画面をすっきりさせるため、常には出さない。
-            DrawCommonSettings();
-
-            ImGui.Spacing();
-            ImGui.Separator();
-
+            // ふだん使う設定は「設定」のバーへ移した（DrawSettingsBar）。
+            // ここには調べもの用だけを置く。
             DrawDebugBody(cfg);
+
             ImGui.Unindent();
         }
 

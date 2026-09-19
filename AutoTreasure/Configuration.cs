@@ -269,14 +269,15 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>
     /// 最下層（第5区画）で止まるか。
     ///
-    /// 第1〜第4区画の座標は実測して表にしてあるが、
-    /// 最下層だけは到達した記録が無く、分かっていない。
+    /// <b>既定は切。</b>
+    /// 最下層の様子は調べ終わったので、ふだん止める必要はない。
+    /// 入れたままだと、周回のたびに最下層で止まって先へ進まない。
     ///
     /// 入れておくと、最下層で「宝箱 → 戦闘 → 宝箱」まで進んだところで
     /// 止まり、そのときの周囲の様子を記録に残す。
-    /// 調べ終わったら切ること。
+    /// また調べたくなったときだけ入れる。
     /// </summary>
-    public bool StopAtFinalRoom { get; set; } = true;
+    public bool StopAtFinalRoom { get; set; } = false;
 
     /// <summary>
     /// 強欲の罠のとき、画面の中身をファイルに書き出すか。
@@ -357,7 +358,45 @@ public sealed class Configuration : IPluginConfiguration
         }
     }
 
-    public void Save() => Svc.PluginInterface.SavePluginConfig(this);
+    /// <summary>
+    /// 設定を保存する。
+    ///
+    /// <b>失敗しても例外を投げない。</b>
+    ///
+    /// 設定ファイルは4台で1つを共有している。
+    /// リーダーが地図の順番を配ると、メンバー3台が同じ瞬間に書き込もうとし、
+    /// Dalamud の保存先（SQLite）が「database is locked」で弾く。
+    ///
+    /// 実測（2026-09-19 15:18:59）:
+    ///   例外がそのまま上がり、毎フレームの処理で捕まえられて
+    ///   「問題が起きました。いったん停止します」となり<b>周回が止まった</b>。
+    ///
+    /// 設定の保存は、失敗しても周回を止めるほどのことではない。
+    /// 次に保存する機会で書ければよい。
+    /// 記録には残すが、呼んだ側へは投げ返さない。
+    /// </summary>
+    public void Save()
+    {
+        try
+        {
+            Svc.PluginInterface.SavePluginConfig(this);
+        }
+        catch (Exception ex)
+        {
+            // 同じ内容を何度も出さない。毎フレーム呼ばれる場所があるため。
+            if (!_saveWarned)
+            {
+                _saveWarned = true;
+                Svc.Log.Warning(ex,
+                    "[AutoTreasure] 設定を保存できませんでした。"
+                    + "ほかのクライアントが同時に書き込んでいる可能性があります。"
+                    + "周回はそのまま続けます。");
+            }
+        }
+    }
+
+    /// <summary>保存の失敗を一度だけ記録するための目印。</summary>
+    private static bool _saveWarned;
 
     /// <summary>
     /// 古い設定を今の形に直す。

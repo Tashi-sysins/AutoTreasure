@@ -2,12 +2,39 @@
   <PropertyGroup>
     <Name>AutoTreasure</Name>
     <Punchline>魔紋自動周回</Punchline>
-    <Description>古ぼけた地図の宝探しを自動化する。宝の座標を割り出して移動し、ディグ・宝箱・討伐・ロット・魔紋の周回までを通しで行う。複数クライアントの足並みも揃える。</Description>
+    <!--
+      説明は長めに書く。
+      Dalamud は短すぎる説明に「very terse」と警告を出し、
+      プラグイン一覧で「検証に問題あり」と表示される。
+      使う人が導入前に判断できるだけの情報を入れておく。
+    -->
+    <Description>古ぼけた地図S5の宝探しを、地図の使用から魔紋の脱出まで通しで自動化します。
+
+宝の座標を地図から割り出し、テレポと移動で現地へ向かい、ディグ・宝箱・討伐・ロットを行います。
+その後は転送魔紋に入り、第1区画から最下層まで進んで脱出します。地図がある限り繰り返します。
+
+1台のパソコンで複数のクライアントを動かす場合、足並みを揃えられます（最大8キャラ）。
+地図を使う人は「指定キャラのみ使用」「1個ずつ順繰り交代」「設定消費数後に交代」から選べます。
+※別々のパソコンの間では連携できません。
+
+必須プラグイン: BossMod Reborn / Rotation Solver Reborn
+経路探索（vnavmesh）は取り込み済みのため、別途の導入は不要です。
+LazyLoot を入れている場合、ロットはそちらに任せます。</Description>
     <Author>ヌル</Author>
-    <Version>0.1.0.1</Version>
+    <Version>0.1.0.2</Version>
     <RootNamespace>AutoTreasure</RootNamespace>
     <AssemblyName>AutoTreasure</AssemblyName>
     <Copyright>AGPL-3.0</Copyright>
+
+    <!--
+      タグを入れる。
+      無いと「見つけにくい」と警告が出る。
+      インストーラの検索に使われるので、探すときの言葉を並べる。
+    -->
+    <Tags>treasure;map;automation;utility;宝の地図;自動</Tags>
+    <CategoryTags>other</CategoryTags>
+    <RepoUrl>https://github.com/Tashi-sysins/AutoTreasure</RepoUrl>
+    <IconUrl>https://raw.githubusercontent.com/Tashi-sysins/Tashi-sysins-repo/main/plugins/AutoTreasure/icon.png</IconUrl>
   </PropertyGroup>
 
   <PropertyGroup>

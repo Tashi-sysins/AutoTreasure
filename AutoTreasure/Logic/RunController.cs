@@ -769,7 +769,19 @@ internal sealed class RunController : IDisposable
         foreach (var (name, count) in slots)
             cfg.MapTurnOrder.Add(new MapTurnSlot { Name = name, Count = count });
 
-        cfg.Save();
+        // <b>ファイルには書かない。</b>
+        //
+        // 設定ファイルは4台で1つを共有している。
+        // ここはリーダーが配った内容を受け取る処理なので、
+        // メンバー3台が同じ瞬間に書き込もうとして衝突する
+        // （実測 2026-09-19 15:18:59「database is locked」で周回が止まった）。
+        //
+        // <b>書かなくても困らない。</b>
+        // 順番を決めるのはリーダーだけで、メンバーは画面に出すために
+        // 覚えているにすぎない。5秒ごとに配り直されるので、
+        // 読み込み直しても、すぐ元の値に揃う。
+        //
+        // 書くのはリーダーだけ（画面で触ったときに保存される）。
 
         Record("リーダーの地図の使用順番に合わせました");
     }
