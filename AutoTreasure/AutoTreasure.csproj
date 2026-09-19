@@ -1,0 +1,172 @@
+﻿<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+  <PropertyGroup>
+    <Name>AutoTreasure</Name>
+    <Punchline>魔紋自動周回</Punchline>
+    <Description>古ぼけた地図の宝探しを自動化する。宝の座標を割り出して移動し、ディグ・宝箱・討伐・ロット・魔紋の周回までを通しで行う。複数クライアントの足並みも揃える。</Description>
+    <Author>ヌル</Author>
+    <Version>0.1.0.0</Version>
+    <RootNamespace>AutoTreasure</RootNamespace>
+    <AssemblyName>AutoTreasure</AssemblyName>
+    <Copyright>AGPL-3.0</Copyright>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Platforms>x64</Platforms>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <DalamudLibPath>$(appdata)\XIVLauncher\addon\Hooks\dev\</DalamudLibPath>
+  </PropertyGroup>
+
+  <!--
+    ECommons を参照する。
+
+    ECommons は AutoDuty 専用のものではなく、多くの Dalamud プラグインが使う共通ライブラリ。
+    ここでは主に次を使う。
+      ・Yes/No ダイアログや会話ウィンドウのクリック処理（AddonMaster）
+      ・タスクを順番に実行する仕組み（TaskManager）
+      ・Svc / Player といったゲーム状態への薄い入口
+
+    これを自前で書き直すのは割に合わないため、素直に借りる。
+    「AutoDuty に依存しない」という方針には反しない。
+  -->
+  <ItemGroup>
+    <PackageReference Include="ECommons" Version="3.2.1.18" />
+  </ItemGroup>
+
+  <!--
+    vnavmesh と DotRecast を、このプラグインの中に取り込む。
+
+    これまでは外部プラグインとしての vnavmesh に IPC で頼っていたが、
+    次の2つの理由で中へ入れることにした。
+
+      ・地形の作り直しに不具合があり、直した版を使う必要がある
+        （階層が変わってもエリア番号が同じ 1209 のままなので、
+          公式版は前の階層の地形を持ち続ける）
+      ・IPC 越しでは「今どういう状態か」が細かく分からず、
+        古い地形なのか新しい地形なのかを見分けられない
+
+    取り込んだのは経路探索に要る部分だけ。
+      ・画面描画（Render / Debug）は入れていない。
+        これらは SharpDX（Direct3D）に依存するため、丸ごと外した。
+      ・vnavmesh 自身の操作画面・IPC の口も入れていない。
+      ・DotRecast も Core / Detour / Detour.Extras / Recast の4つだけ。
+        Crowd・Dynamic・TileCache・Demo・Toolset は使わないので外した。
+
+    結果、vnavmesh 7,656行 + DotRecast 30,918行。
+    どちらも元のままで、直したのは NavmeshManager.cs の1か所だけ。
+  -->
+  <!--
+    取り込んだコードの警告は黙らせる。
+
+    DotRecast は null 許容の書き方が今より古く、そのままだと
+    199 件の警告が出る。中身に手を入れる予定は無いので、
+    ここを直しても本家との差分が増えるだけで得がない。
+
+    本当は取り込んだファイルだけを対象にしたいが、
+    MSBuild では1ファイルごとに警告を切ることができない。
+    やむを得ず全体で切っている。
+
+    <b>切っているのは null 許容まわりだけ。</b>
+    書き間違いを知らせる警告（未使用の変数、到達しないコードなど）は
+    そのまま出る。自分たちのコードの誤りは見落とさない。
+  -->
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);CS8767;CS8618;CS8625;CS8603;CS8604;CS8602;CS8600;CS8601;CS8632;CA2022</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Vendor\vnavmesh\**\*.cs" />
+    <Compile Include="..\Vendor\DotRecast\DotRecast.Core\**\*.cs"
+             Exclude="..\Vendor\DotRecast\DotRecast.Core\obj\**\*.cs;..\Vendor\DotRecast\DotRecast.Core\bin\**\*.cs" />
+    <Compile Include="..\Vendor\DotRecast\DotRecast.Detour\**\*.cs"
+             Exclude="..\Vendor\DotRecast\DotRecast.Detour\obj\**\*.cs;..\Vendor\DotRecast\DotRecast.Detour\bin\**\*.cs" />
+    <Compile Include="..\Vendor\DotRecast\DotRecast.Detour.Extras\**\*.cs"
+             Exclude="..\Vendor\DotRecast\DotRecast.Detour.Extras\obj\**\*.cs;..\Vendor\DotRecast\DotRecast.Detour.Extras\bin\**\*.cs" />
+    <Compile Include="..\Vendor\DotRecast\DotRecast.Recast\**\*.cs"
+             Exclude="..\Vendor\DotRecast\DotRecast.Recast\obj\**\*.cs;..\Vendor\DotRecast\DotRecast.Recast\bin\**\*.cs" />
+  </ItemGroup>
+
+  <!--
+    開発用と配布用の2種類をビルドする。
+
+      Release … 開発用。動作ログや現在の状態など、様子を見るための表示を含む。
+      Dist    … 配布用。操作に必要なものだけを表示する。
+
+    Dist では DIST を定義し、開発用の画面をコンパイル対象から外す。
+    「隠す」のではなく実際に含めないので、配布物に開発用の表示が混ざらない。
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Dist'">
+    <DefineConstants>$(DefineConstants);DIST</DefineConstants>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Dist\</OutputPath>
+  </PropertyGroup>
+
+  <!--
+    ビルドしたら、Dalamud が読み込んでいるフォルダへ自動でコピーする。
+
+    Dalamud 側で「Automatic Reloading」を有効にしてあるので、
+    ここに DLL が置かれた時点で、起動中の全キャラクターが新しい版を読み直す。
+    プラグインを手で ON / OFF する必要はない。
+
+    ゲームが DLL を掴んでいてコピーできないことがあるため、
+    失敗してもビルドは止めない（ContinueOnError）。
+    その場合は「配置できませんでした」と出るので、もう一度ビルドすれば良い。
+  -->
+  <PropertyGroup>
+    <DeployDir Condition="'$(Configuration)' == 'Release'">C:\自作プラグイン\AutoTreasure\</DeployDir>
+    <DeployDir Condition="'$(Configuration)' == 'Dist'">C:\自作プラグイン\AutoTreasure_配布用\</DeployDir>
+  </PropertyGroup>
+
+  <Target Name="DeployToPluginFolder" AfterTargets="Build" Condition="'$(DeployDir)' != ''">
+    <!--
+      Condition で存在を確かめてから並べる。
+      Dalamud のパッケージ処理が manifest(.json) を作るのは Release のときだけで、
+      Dist でそのまま並べると「ファイルが見つからない」警告が出る。
+      Dist では Release がビルドした manifest を使う（中身は同じで良い）。
+    -->
+    <ItemGroup>
+      <DeployFiles Include="$(OutputPath)$(AssemblyName).dll"
+                   Condition="Exists('$(OutputPath)$(AssemblyName).dll')" />
+      <DeployFiles Include="$(OutputPath)$(AssemblyName).json"
+                   Condition="Exists('$(OutputPath)$(AssemblyName).json')" />
+      <DeployFiles Include="bin\Release\$(AssemblyName).json"
+                   Condition="!Exists('$(OutputPath)$(AssemblyName).json') And Exists('bin\Release\$(AssemblyName).json')" />
+      <DeployFiles Include="$(OutputPath)$(AssemblyName).deps.json"
+                   Condition="Exists('$(OutputPath)$(AssemblyName).deps.json')" />
+      <!--
+        ECommons.dll も一緒に置く。
+        これが無いと、読み込み時に参照を解決できずプラグインが起動しない。
+      -->
+      <DeployFiles Include="$(OutputPath)ECommons.dll"
+                   Condition="Exists('$(OutputPath)ECommons.dll')" />
+      <DeployImages Include="..\images\icon.png" Condition="Exists('..\images\icon.png')" />
+    </ItemGroup>
+
+    <MakeDir Directories="$(DeployDir)" />
+    <MakeDir Directories="$(DeployDir)images\" />
+
+    <Copy SourceFiles="@(DeployFiles)"
+          DestinationFolder="$(DeployDir)"
+          ContinueOnError="true">
+      <Output TaskParameter="CopiedFiles" ItemName="ActuallyCopied" />
+    </Copy>
+
+    <Copy SourceFiles="@(DeployImages)"
+          DestinationFolder="$(DeployDir)images\"
+          ContinueOnError="true" />
+
+    <Warning Condition="'@(ActuallyCopied)' == ''"
+             Text="配置できませんでした。ゲームが DLL を掴んでいる可能性があります。もう一度ビルドしてください。" />
+    <Message Condition="'@(ActuallyCopied)' != ''"
+             Importance="high"
+             Text="配置しました: $(DeployDir)（起動中のキャラクターは自動で読み直します）" />
+  </Target>
+</Project>
