@@ -4,7 +4,7 @@
     <Punchline>魔紋自動周回</Punchline>
     <Description>古ぼけた地図の宝探しを自動化する。宝の座標を割り出して移動し、ディグ・宝箱・討伐・ロット・魔紋の周回までを通しで行う。複数クライアントの足並みも揃える。</Description>
     <Author>ヌル</Author>
-    <Version>0.1.0.0</Version>
+    <Version>0.1.0.1</Version>
     <RootNamespace>AutoTreasure</RootNamespace>
     <AssemblyName>AutoTreasure</AssemblyName>
     <Copyright>AGPL-3.0</Copyright>
