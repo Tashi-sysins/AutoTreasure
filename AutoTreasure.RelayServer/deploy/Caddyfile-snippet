@@ -1,0 +1,39 @@
+# VPS の Caddyfile へ足す。
+#
+# 既存の行（/estell/*、/mogcolle/*、reverse_proxy app:8000）は**触らない**。
+#
+# ⚠ 置く場所が決定的に重要。
+#   reverse_proxy app:8000 は**すべてを受ける catch-all** なので、
+#   その前に置かないと /treasure/ が届かない。
+#
+# 置き場所: /home/ubuntu/estelld-repo/Caddyfile
+#
+# ── 追加後の姿（例） ────────────────────────────────
+# estelldprereleaserepo.net {
+#     encode gzip
+#
+#     # estell ミラー（既存・触らない）
+#     handle_path /estell/* {
+#         root * /srv/estell
+#         file_server browse
+#     }
+#
+#     # MogColle（既存・触らない）
+#     handle /mogcolle/* {
+#         reverse_proxy mogcolle-relay:8080
+#     }
+#
+#     # ↓↓↓ ここから追加 ↓↓↓
+#     handle /treasure/* {
+#         reverse_proxy treasure-relay:8080
+#     }
+#     # ↑↑↑ ここまで追加 ↑↑↑
+#
+#     reverse_proxy app:8000     # 既存・触らない（catch-all）
+# }
+# ────────────────────────────────────────────────
+
+handle /treasure/* {
+	# WebSocket はそのまま通す。Caddy は自動で扱う。
+	reverse_proxy treasure-relay:8080
+}

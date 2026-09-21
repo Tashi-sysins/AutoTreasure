@@ -21,7 +21,7 @@
 経路探索（vnavmesh）は取り込み済みのため、別途の導入は不要です。
 LazyLoot を入れている場合、ロットはそちらに任せます。</Description>
     <Author>ヌル</Author>
-    <Version>0.1.0.2</Version>
+    <Version>0.2.0.0</Version>
     <RootNamespace>AutoTreasure</RootNamespace>
     <AssemblyName>AutoTreasure</AssemblyName>
     <Copyright>AGPL-3.0</Copyright>

@@ -1,0 +1,26 @@
+# VPS の docker-compose.yml へ、このサービスを足す。
+#
+# 既存の app / caddy / mogcolle-relay は触らない。1つ増やすだけ。
+#
+# 置き場所: /home/ubuntu/estelld-repo/docker-compose.yml の services: の下
+#
+# ⚠ container_name を mogcolle-relay と**別名**にすること。
+#   同じ名前にすると、稼働中の MogColle のコンテナを置き換えてしまう。
+
+  treasure-relay:
+    build:
+      context: ./treasure-relay
+      dockerfile: AutoTreasure.RelayServer/Dockerfile
+    container_name: treasure-relay
+    restart: unless-stopped
+    environment:
+      TREASURE_RELAY_PORT: "8080"
+      # 記録は控えめにする。常駐するのでログが太らないように。
+      Logging__LogLevel__Default: "Information"
+      Logging__LogLevel__Microsoft.AspNetCore: "Warning"
+    # 外へは出さない。Caddy からだけ届けばよい。
+    #
+    # ⚠ ports: にすると VPS の外から直接叩けてしまう。
+    #   expose なら Caddy からしか届かない。
+    expose:
+      - "8080"

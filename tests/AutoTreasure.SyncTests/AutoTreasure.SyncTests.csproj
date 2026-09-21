@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    ゲーム無しで、本番のコードをそのまま試す。
+
+    なぜプロジェクト参照ではないか:
+      本体は Dalamud.NET.Sdk で建っているので、参照するとゲームが要る。
+
+    なぜ書き直さないか:
+      試験用に作り直すと「**偽物が通った**」だけになる。
+      本番のファイルをそのまま取り込む。
+
+    ⚠ ここに並ぶファイルを動かすと、この csproj も直す必要がある。
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>AutoTreasure.SyncTests</RootNamespace>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 本番の合図の形。Dalamud に依存していないのでそのまま取り込める。 -->
+    <Compile Include="..\..\AutoTreasure\Sync\SyncMessage.cs"
+             Link="Production\SyncMessage.cs" />
+
+    <!-- 本番の封筒の形。サーバーと共有している正本。 -->
+    <Compile Include="..\..\AutoTreasure\Sync\Relay\RelayProtocol.cs"
+             Link="Production\RelayProtocol.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+</Project>

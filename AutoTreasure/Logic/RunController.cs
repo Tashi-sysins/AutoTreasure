@@ -155,7 +155,13 @@ internal sealed class RunController : IDisposable
     /// </summary>
     private const double RollSettleSeconds = 8.0;
 
-    private readonly PipeSync _sync;
+    /// <summary>
+    /// 連携の口。
+    ///
+    /// 同一PC（パイプ）とインターネット（中継）のどちらかが入る。
+    /// ここから下は、どちらで繋いでいるかを気にしない。
+    /// </summary>
+    private readonly ISyncTransport _sync;
     private readonly StuckDetector _stuck = new(12.0);
 
     private RunState _state = RunState.Idle;
@@ -634,7 +640,7 @@ internal sealed class RunController : IDisposable
     internal RunController(RunLog? log = null)
     {
         _log = log;
-        _sync = new PipeSync(Plugin.Config.PipeName);
+        _sync = SyncTransportFactory.Create();
     }
 
     /// <summary>誰からいつ合図が届いたか。連携の実態を見るために使う。</summary>

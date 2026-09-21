@@ -325,7 +325,15 @@ internal sealed class MainWindow : Window
             // 足りていないことに気づける。
             var expected = PartyRoleDetector.ResolveExpectedMembers();
 
-            ImGui.TextDisabled($"連携: {_controller.SyncStatus}");
+            // どちらの経路で繋いでいるかも出す。
+            //
+            // 「インターネット」を選んでいても URL が空ならパイプで動く。
+            // 設定の値をそのまま出すと、実際と食い違って原因が分からなくなる。
+            var via = Sync.SyncTransportFactory.Effective() == SyncTransportKind.Internet
+                ? "インターネット"
+                : "このPCだけ";
+
+            ImGui.TextDisabled($"連携[{via}]: {_controller.SyncStatus}");
 
             if (cfg.Role == ClientRole.Leader)
             {
@@ -404,16 +412,109 @@ internal sealed class MainWindow : Window
     {
         var cfg = Plugin.Config;
 
-        // メンバーには出さない。
-        if (cfg.Role == ClientRole.Member)
-            return;
-
         if (!ImGui.CollapsingHeader("設定"))
             return;
 
         ImGui.Indent();
-        DrawCommonSettings();
+
+        // 繋ぎ方だけは、メンバーにも出す。
+        //
+        // <b>これが無いと、メンバーは中継サーバーのURLを入れられない。</b>
+        // 繋ぎ方は1台ずつ設定するものなので、
+        // リーダーが設定しても他の機には伝わらない。
+        //
+        // 他の設定（周回の続け方・地図の順番など）は
+        // リーダーが決めて配るので、これまでどおり出さない。
+        DrawSyncTransport(cfg);
+
+        if (cfg.Role != ClientRole.Member)
+            DrawCommonSettings();
+
         ImGui.Unindent();
+    }
+
+    /// <summary>
+    /// 連携の経路。
+    ///
+    /// 「このPCだけ」と「インターネット」を選ぶ。
+    ///
+    /// 既定はインターネットだが、<b>URL が空のときはこのPCだけで動く</b>。
+    /// URL を知らない人が更新しただけで連携できなくなるのを防ぐため。
+    /// </summary>
+    private void DrawSyncTransport(Configuration cfg)
+    {
+        ImGui.TextUnformatted("繋ぎ方");
+
+        var kind = cfg.SyncTransport;
+
+        // 「このPCだけ」
+        if (ImGui.RadioButton("このPCだけ", kind == SyncTransportKind.LocalPipe))
+        {
+            cfg.SyncTransport = SyncTransportKind.LocalPipe;
+            cfg.Save();
+        }
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip(
+                "同じパソコンで複数のクライアントを動かすとき。\n"
+                + "速く、中継サーバーも要らない。");
+        }
+
+        ImGui.SameLine(0, 16);
+
+        // 「インターネット」
+        if (ImGui.RadioButton("インターネット（他の人と繋ぐ）", kind == SyncTransportKind.Internet))
+        {
+            cfg.SyncTransport = SyncTransportKind.Internet;
+            cfg.Save();
+        }
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip(
+                "別々の家・別々の回線からでも足並みを揃えられる。\n"
+                + "中継サーバーのURLが要る。");
+        }
+
+        if (cfg.SyncTransport == SyncTransportKind.Internet)
+        {
+            var url = cfg.RelayUrl ?? "";
+
+            ImGui.SetNextItemWidth(360f);
+            if (ImGui.InputText("中継サーバーのURL", ref url, 200))
+            {
+                cfg.RelayUrl = url;
+                cfg.Save();
+            }
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.SetTooltip(
+                    "例: wss://例えば.net/treasure/ws\n"
+                    + "一緒に回る人と同じURLにする。");
+            }
+
+            // URL が無いなら、いま何が起きているかをはっきり書く。
+            //
+            // 「インターネットを選んだのに繋がらない」と見えると、
+            // 原因が分からないまま時間を使わせてしまう。
+            if (string.IsNullOrWhiteSpace(cfg.RelayUrl))
+            {
+                ImGui.TextColored(new Vector4(1f, 0.8f, 0.3f, 1f),
+                    "URL が空のため、いまは「このPCだけ」で動いています。");
+            }
+            else
+            {
+                ImGui.TextDisabled(
+                    "同じパーティーなら、招待のやり取りは要りません（自動で繋がります）。");
+            }
+        }
+
+        // 経路は起動時に決まる。切り替えたら入れ直してもらう。
+        //
+        // 走っている最中に差し替えると、送った合図が宙に浮く。
+        ImGui.TextDisabled("※ 変えたら、いったん停止してから始め直してください。");
+
+        ImGui.Separator();
+        ImGui.Spacing();
     }
 
     /// <summary>設定バーの中身。</summary>

@@ -29,6 +29,21 @@ public enum ClientRole
 }
 
 /// <summary>
+/// 連携の経路。
+///
+/// どちらも「やり取りする中身」は同じ（SyncMessage の文字列）。
+/// 違うのは運び方だけなので、片方で動けばもう片方でも動く。
+/// </summary>
+public enum SyncTransportKind
+{
+    /// <summary>このPCだけ。名前付きパイプ。速いが同じPCの中でしか通じない。</summary>
+    LocalPipe,
+
+    /// <summary>インターネット。中継サーバー経由。別々の家からでも繋がる。</summary>
+    Internet,
+}
+
+/// <summary>
 /// ロットで何を選ぶか。
 /// </summary>
 public enum RollChoice
@@ -192,6 +207,44 @@ public sealed class Configuration : IPluginConfiguration
 
     /// <summary>複数クライアントの連携に使う名前付きパイプの名前。全機で同じにする。</summary>
     public string PipeName { get; set; } = "AutoTreasurePipe";
+
+    /// <summary>
+    /// 連携の経路。
+    ///
+    /// <b>既定はインターネット。</b>
+    /// 別々の家・別々の回線からでも足並みを揃えられる。
+    ///
+    /// 同じPCで複数クライアントを動かす場合は
+    /// <see cref="SyncTransportKind.LocalPipe"/> のほうが速く、
+    /// 中継サーバーに無駄な負荷もかからない。
+    ///
+    /// ⚠ <see cref="RelayUrl"/> が空のときは、既定でもパイプで動く。
+    ///   URL を知らない人が更新しただけで連携できなくなるのを防ぐため。
+    /// </summary>
+    public SyncTransportKind SyncTransport { get; set; } = SyncTransportKind.Internet;
+
+    /// <summary>
+    /// 中継サーバーの URL（wss://...）。
+    ///
+    /// <b>既定は空。</b>
+    /// 配布物に自分のサーバーを埋めると、他人の利用が
+    /// すべて自分の VPS に来てしまうため。
+    /// 一緒に回る人には、この値を手渡しする。
+    ///
+    /// 例: wss://estelldprereleaserepo.net/treasure/ws
+    /// </summary>
+    public string RelayUrl { get; set; } = "";
+
+    /// <summary>
+    /// 参加するときの招待（ATR1:...）。
+    ///
+    /// <b>ふつうは空のままでよい。</b>
+    /// 同じパーティーなら、リーダーが預けた招待を
+    /// サーバーから自動で受け取る（PartyKey が合言葉になる）。
+    ///
+    /// パーティーを組まずに繋ぐときだけ、手で貼り付ける。
+    /// </summary>
+    public string RelayInviteCode { get; set; } = "";
 
     /// <summary>
     /// 連携できる最大の台数（自分を除く）。

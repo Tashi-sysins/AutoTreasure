@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    AutoTreasure の中継サーバー。
+
+    何をするか:
+      別々の家にいる最大8人を繋ぐ。全員がここへ**外向きに**接続するので、
+      家庭のルーターでポートを開ける必要がない。
+
+    何をしないか:
+      ゲームの状態を解釈しない。周回の判断もしない。
+      それらは全部クライアント側にある。ここは薄い中継に徹する。
+
+      こうしておくと、ゲームの仕様や周回の作りが変わっても
+      サーバーを直さずに済む。
+
+    MogColle の中継サーバーとの違い（転用時に必ず効く3点）:
+      ①人数が 4 ではなく 8（パーティ最大）
+      ②**送り主以外の全員**へ配る（MogColle は参加側→取りまとめ役だけ）
+        AutoTreasure は PipeSync の時点でメンバー同士へ中継していたため、
+        同じ振る舞いにしないと StepDone が他のメンバーに見えなくなる
+      ③中身が JSON オブジェクトではなく「Kind|引数|引数」の文字列
+
+    置き場所:
+      estell の VPS（さくらVPS 大阪・Ubuntu 24.04）。
+      MogColle とは**別のコンテナ・別のパス**（/treasure/）で立てる。
+      443 の中でパスを分けるため、ポートの追加開放は要らない。
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <AssemblyName>TreasureRelay</AssemblyName>
+    <RootNamespace>AutoTreasure.RelayServer</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      取り決め（封筒の形）は本番のプラグインと同じものを使う。
+      作り直すと、通ったつもりで実は形が違う、という事故が起きる。
+
+      ⚠ プラグイン側の csproj には何も書かない。
+        Dalamud.NET.Sdk が **/*.cs で自動的に拾うため。
+        このファイルを動かすと、ここと Dockerfile の COPY、
+        配置スクリプトの tar が同時に壊れる。
+    -->
+    <Compile Include="..\AutoTreasure\Sync\Relay\RelayProtocol.cs"
+             Link="Shared\RelayProtocol.cs" />
+  </ItemGroup>
+
+</Project>

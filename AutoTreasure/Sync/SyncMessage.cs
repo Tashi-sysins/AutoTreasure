@@ -291,10 +291,24 @@ internal readonly record struct SyncMessage(SyncKind Kind, string[] Args)
 
         var parts = line.Split(Separator);
 
-        // 数字の文字列も enum として通ってしまうため、
+        var head = parts[0];
+
+        // 数字の文字列は受け付けない。
+        //
+        // ⚠ Enum.IsDefined だけでは足りない（2026-09-22 実測）。
+        //   Enum.TryParse("0") は Treasure として通り、
+        //   IsDefined も true を返す。範囲内の数字はすべて素通りしていた。
+        //   弾けていたのは "99" のような範囲外の数字だけ。
+        //
+        //   中継サーバー経由では、届く文字列が同じPCの中とは限らない。
+        //   壊れた相手や版違いが投げたものを「宝の場所」と解釈すると、
+        //   まったく違う座標へ歩き出す。頭が数字なら、その場で捨てる。
+        if (head.Length == 0 || char.IsAsciiDigit(head[0]) || head[0] is '-' or '+')
+            return false;
+
         // 定義されている名前かどうかまで確かめる。
         // 他のプラグインと名前が重なったときの誤作動を防ぐ。
-        if (!Enum.TryParse<SyncKind>(parts[0], ignoreCase: false, out var kind)
+        if (!Enum.TryParse<SyncKind>(head, ignoreCase: false, out var kind)
             || !Enum.IsDefined(kind))
             return false;
 

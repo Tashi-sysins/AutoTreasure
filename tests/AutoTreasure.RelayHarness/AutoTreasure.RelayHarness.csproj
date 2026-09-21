@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    中継サーバーを、ゲーム無しで試すための疑似ノード。
+
+    ⚠ 疑似ノードはプロセスを分けて動かすこと。
+      MogColle では「全員切断しても11秒間そのままだった」不具合が、
+      同じプロセス内の検証では見つからず、
+      別プロセスにして初めて出た。
+
+    使い方（引数は本文の Program.cs を参照）:
+      dotnet run  →  url / role / name / party / send / seconds を渡す
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>AutoTreasure.RelayHarness</RootNamespace>
+    <AssemblyName>RelayHarness</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 封筒の形は本番と同じものを使う。作り直すと偽物を試すことになる。 -->
+    <Compile Include="..\..\AutoTreasure\Sync\Relay\RelayProtocol.cs"
+             Link="Production\RelayProtocol.cs" />
+
+    <!-- 合図の形も本番のまま。 -->
+    <Compile Include="..\..\AutoTreasure\Sync\SyncMessage.cs"
+             Link="Production\SyncMessage.cs" />
+
+    <!--
+      本番の中継クライアントそのもの。
+      Dalamud に依存していないので、ここへ取り込める（確認済み）。
+
+      作り直した相手ではなく**本物**と話せるので、
+      「試験では通ったのに実機で動かない」が起きにくい。
+    -->
+    <Compile Include="..\..\AutoTreasure\Sync\Relay\RelayCoordinator.cs"
+             Link="Production\RelayCoordinator.cs" />
+  </ItemGroup>
+
+</Project>

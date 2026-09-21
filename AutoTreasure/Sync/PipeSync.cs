@@ -16,7 +16,7 @@ internal enum SyncMode { Stopped, Leader, Member }
 /// 同一PCの名前付きパイプ。接続の公開と世代判定を同じロックで行い、
 /// 送信・中継は同じ列を通す。ゲームのスレッドで通信の完了を待たない。
 /// </summary>
-internal sealed class PipeSync : IDisposable
+internal sealed class PipeSync : ISyncTransport
 {
     private readonly string _pipeName;
     private readonly Lock _stateLock = new();
@@ -32,10 +32,10 @@ internal sealed class PipeSync : IDisposable
     private volatile SyncMode _mode;
     private volatile string _statusText = "停止中";
 
-    internal SyncMode Mode => _mode;
-    internal string StatusText => _statusText;
-    internal int ConnectedClients { get { lock (_stateLock) return _clients.Count; } }
-    internal bool IsConnected
+    public SyncMode Mode => _mode;
+    public string StatusText => _statusText;
+    public int ConnectedClients { get { lock (_stateLock) return _clients.Count; } }
+    public bool IsConnected
     {
         get { lock (_stateLock) return _toLeader != null || _clients.Count > 0; }
     }
@@ -43,8 +43,8 @@ internal sealed class PipeSync : IDisposable
     internal PipeSync(string pipeName)
         => _pipeName = string.IsNullOrWhiteSpace(pipeName) ? "AutoTreasurePipe" : pipeName;
 
-    internal void StartAsLeader() => Start(SyncMode.Leader);
-    internal void StartAsMember() => Start(SyncMode.Member);
+    public void StartAsLeader() => Start(SyncMode.Leader);
+    public void StartAsMember() => Start(SyncMode.Member);
 
     private void Start(SyncMode mode)
     {
@@ -79,7 +79,7 @@ internal sealed class PipeSync : IDisposable
         }
     }
 
-    internal void Stop()
+    public void Stop()
     {
         List<StreamWriter> old;
         lock (_stateLock)
@@ -102,7 +102,7 @@ internal sealed class PipeSync : IDisposable
         // ここで0へ戻すと旧送信の完了により負数になる。
     }
 
-    internal void Send(SyncMessage message)
+    public void Send(SyncMessage message)
     {
         int generation;
         lock (_stateLock)
@@ -157,7 +157,7 @@ internal sealed class PipeSync : IDisposable
         }
     }
 
-    internal bool TryReceive(out SyncMessage message) => _received.TryDequeue(out message);
+    public bool TryReceive(out SyncMessage message) => _received.TryDequeue(out message);
 
     private async Task LeaderLoop(CancellationToken token, int generation)
     {
