@@ -871,6 +871,89 @@ internal sealed class RunController : IDisposable
         _log?.Write($"《動作》 {text}");
     }
 
+    /// <summary>
+    /// 同じ内容は間を空けて記録する。
+    ///
+    /// <see cref="RecordOnce"/> は一度きりなので、
+    /// 「止まったまま」を追うのに使えない（最初の1回で終わる）。
+    /// こちらは同じ内容でも、間隔が空けばまた残す。
+    ///
+    /// 実際、宝箱の手前で止まったとき、記録がまったく残らず
+    /// 何が起きているのか追えなかった（2026-09-22）。
+    /// </summary>
+    private readonly Dictionary<string, DateTime> _recordedEvery = [];
+
+    private void RecordEvery(string key, double seconds, string text)
+    {
+        var now = DateTime.UtcNow;
+
+        if (_recordedEvery.TryGetValue(key, out var last)
+            && (now - last).TotalSeconds < seconds)
+        {
+            return;
+        }
+
+        _recordedEvery[key] = now;
+        Record(text);
+    }
+
+    /// <summary>
+    /// いま何をしているかを、定期的に記録する。
+    ///
+    /// <b>「動いていない」ことを記録に残すためのもの。</b>
+    ///
+    /// これまでは段階が変わったときしか記録していなかった。
+    /// そのため、段階の中で止まってしまうと
+    /// <b>記録が一行も増えないまま何分も過ぎ</b>、
+    /// 何が起きていたのかまったく追えなかった。
+    ///
+    /// 実測（2026-09-22 09:19:28〜09:23:32）:
+    ///   宝箱まで 12.5m の位置で止まり、座標が4分間まったく動かなかった。
+    ///   その間の記録は 0 行。例外も出ていない。
+    ///
+    /// 動いているときは黙っていてよいので、
+    /// <b>場所が変わっていないときだけ</b>残す。
+    /// </summary>
+    private Vector3 _lastWatchPos;
+    private DateTime _lastWatchMoved = DateTime.UtcNow;
+
+    private void WatchStall()
+    {
+        if (!IsRunning)
+            return;
+
+        var now = DateTime.UtcNow;
+        var pos = PlayerHelper.Position;
+
+        // 1m以上動いていれば、詰まってはいない。
+        if (Vector3.Distance(pos, _lastWatchPos) > 1f)
+        {
+            _lastWatchPos = pos;
+            _lastWatchMoved = now;
+            return;
+        }
+
+        // 止まってから10秒は黙っておく。待ち合わせなど、
+        // 止まっているのが正しい場面もある。
+        var still = (now - _lastWatchMoved).TotalSeconds;
+
+        if (still < 10)
+            return;
+
+        // 10秒ごとに、いま何をしているつもりかを残す。
+        RecordEvery("stall", 10,
+            $"止まっています（{still:F0}秒）"
+            + $" 段階={_state.ToJapanese()}"
+            + $" 表示=「{_note}」"
+            + $" 地図役={(IsMapUser ? "自分" : _mapUser)}"
+            + $" 戦闘={PlayerHelper.InCombat}"
+            + $" 移動可={MovementHelper.MovementAllowed}"
+            + (MovementHelper.MovementAllowed ? "" : $"（理由: {MovementHelper.BlockReason}）")
+            + $" 経路探索中={IPC.VNavmesh.PathfindInProgress}"
+            + $" 経路移動中={IPC.VNavmesh.PathIsRunning}"
+            + $" 地形={IPC.VNavmesh.NavIsReady}");
+    }
+
     /// <summary>やり取りを始める。役割に応じて受け口か接続かが決まる。</summary>
     internal void StartSync()
     {
@@ -1442,6 +1525,12 @@ internal sealed class RunController : IDisposable
             _stuck.Reset();
             return;
         }
+
+        // 止まったままになっていないかを見張る。
+        //
+        // ここに置くのは、段階ごとの処理より<b>前</b>。
+        // 処理の中で早期に return していても、記録だけは残る。
+        WatchStall();
 
         switch (_state)
         {
@@ -2343,14 +2432,36 @@ internal sealed class RunController : IDisposable
         var distance = ObjectHelper.DistanceToPlayer(chest);
         if (distance > 3f)
         {
-            MovementHelper.MoveTo(chest.Position, 2f, false);
+            var moving = MovementHelper.MoveTo(chest.Position, 2f, false);
             _note = $"宝箱へ向かっています（{distance:F0} m）";
+
+            // <b>近づけているのかどうかを残す。</b>
+            // 実測では 12.5m の位置で止まったまま4分過ぎたが、
+            // 記録が一行も出ず、何を試したのか分からなかった。
+            RecordEvery("chest-approach", 5,
+                $"宝箱へ近づいています（残り {distance:F1}m"
+                + $" 指示={(moving ? "受理" : "拒否: " + MovementHelper.LastMoveRefusal)}"
+                + $" 経路探索中={IPC.VNavmesh.PathfindInProgress}"
+                + $" 経路移動中={IPC.VNavmesh.PathIsRunning}"
+                + $" 移動可={MovementHelper.MovementAllowed}"
+                + $" 宝箱={chest.Position}）");
 
             if (_stuck.Check())
             {
                 MovementHelper.Stop();
-                Svc.Log.Information("宝箱に近づけないので、経路を引き直します。");
+                Record($"宝箱に近づけないので、経路を引き直します（残り {distance:F1}m）");
             }
+
+            // 近づけないまま時間が過ぎたら、そのことを残して次へ。
+            //
+            // ここに時間切れが無かったため、3m以内に入れないと
+            // <b>この枝から永久に出られなかった</b>。
+            if (SecondsInState > ChestTimeoutSeconds)
+            {
+                Record($"宝箱へ近づけませんでした（残り {distance:F1}m）。次へ進みます");
+                SetState(RunState.Rolling);
+            }
+
             return;
         }
 

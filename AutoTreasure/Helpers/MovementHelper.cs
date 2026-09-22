@@ -344,10 +344,28 @@ internal static unsafe class MovementHelper
         BlockReason = "";
     }
 
+    /// <summary>
+    /// 直前に MoveTo が断った理由。空なら受理している。
+    ///
+    /// <b>黙って false を返す道筋が多いため。</b>
+    /// 実測（2026-09-22）では、宝箱まで12.5mの位置で移動が止まったまま
+    /// 4分過ぎたが、何が起きたのか記録から追えなかった。
+    /// 断った理由をここに残し、呼んだ側が記録できるようにする。
+    /// </summary>
+    internal static string LastMoveRefusal { get; private set; } = "";
+
+    private static bool Refuse(string reason)
+    {
+        LastMoveRefusal = reason;
+        return false;
+    }
+
     internal static bool MoveTo(Vector3 destination, float range, bool fly)
     {
+        LastMoveRefusal = "";
+
         if (!PlayerHelper.IsReady)
-            return false;
+            return Refuse("まだ操作できません（ロード中・ムービー中など）");
 
         // 区画を移っている最中は、どこからの指示でも動かない。
         //
@@ -356,14 +374,14 @@ internal static unsafe class MovementHelper
         // 解いたそのフレームに禁止し直されると、時刻が入り直って
         // 「1フレームだけ動いては30秒止まる」を繰り返すことになる。
         if (!MovementAllowed)
-            return false;
+            return Refuse($"移動を禁じています（{BlockReason}）");
 
         // 地形が無いと、何を指示しても静かに失敗する。
         // 待つだけでなく、作り始めていなければこちらから促す。
         if (!VNavmesh.NavIsReady)
         {
             NavmeshWatcher.EnsureBuilding();
-            return false;
+            return Refuse("地形がまだ読めていません");
         }
 
         // 自分が地形の上にいないなら、経路は引けない。
@@ -386,7 +404,7 @@ internal static unsafe class MovementHelper
         if (!PlayerHelper.IsFlying
             && !VNavmesh.IsPointOnMesh(PlayerHelper.Position, MeshFootTolerance, true))
         {
-            return false;
+            return Refuse("自分の足元に地形がありません（運ばれている最中など）");
         }
 
         // 経路探索中、または経路に沿って移動中なら、そのまま任せる。

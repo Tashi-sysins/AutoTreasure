@@ -180,7 +180,37 @@ LazyLoot を入れている場合、ロットはそちらに任せます。</Des
     <MakeDir Directories="$(DeployDir)" />
     <MakeDir Directories="$(DeployDir)images\" />
 
-    <Copy SourceFiles="@(DeployFiles)"
+    <!--
+      DLL 以外を先に置き、DLL を最後に置く。
+
+      なぜ順番が要るか（2026-09-22 に実際に困った）:
+        Dalamud の開発プラグインは、ファイルの変更を見て読み直す。
+        ところが短い間に何度も変わると
+        「Skipping reload of AutoTreasure, file has changed again」
+        となって<b>読み直しそのものを見送る</b>。
+
+        まとめて置くと dll/json/deps が同時に変わり、これに当たる。
+        そのため毎回キャラクターごとに手で ON/OFF する羽目になっていた。
+
+      DLL を最後の単独の書き込みにすると、
+      「最後に変わったのは DLL」となり、読み直しが安定して走る。
+    -->
+    <ItemGroup>
+      <DeploySupport Include="@(DeployFiles)"
+                     Exclude="$(OutputPath)$(AssemblyName).dll" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(DeploySupport)"
+          DestinationFolder="$(DeployDir)"
+          ContinueOnError="true" />
+
+    <!--
+      支えのファイルを置いてから、少し待つ。
+      間を空けないと、結局ひとかたまりの変更として扱われる。
+    -->
+    <Exec Command="ping -n 2 127.0.0.1 &gt; nul" ContinueOnError="true" />
+
+    <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll"
           DestinationFolder="$(DeployDir)"
           ContinueOnError="true">
       <Output TaskParameter="CopiedFiles" ItemName="ActuallyCopied" />
