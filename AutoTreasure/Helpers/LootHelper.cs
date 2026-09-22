@@ -139,9 +139,18 @@ internal static unsafe class LootHelper
     /// ただしアイテムによっては Need を選べないので、その場合は自動的に控えめな方へ落とす。
     /// </param>
     /// <returns>1件処理したら true。処理するものが無ければ false。</returns>
-    internal static bool RollPending(RollResult preferred)
+    /// <param name="takeOver">
+    /// LazyLoot が押さないので、こちらが代わりに押す場合は true。
+    ///
+    /// ⚠ これが無いと<b>受け皿が働かない</b>（2026-09-22 実測）。
+    ///   呼ぶ側で「待っても押されない」と判断して呼んでも、
+    ///   下の歯止めが無条件に止めていたため何も起きず、
+    ///   「こちらでロットします」という記録だけが10秒ごとに
+    ///   延々と残り、ロット窓は開いたままだった。
+    /// </param>
+    internal static bool RollPending(RollResult preferred, bool takeOver = false)
     {
-        // LazyLoot が入っているなら、何があっても押さない。
+        // LazyLoot が入っているなら、原則として押さない。
         //
         // <b>最後の歯止め。</b>
         // 呼ぶ側（RunController）でも止めているが、
@@ -151,7 +160,11 @@ internal static unsafe class LootHelper
         // 両方が押すと、こちらが Need を押す前に LazyLoot が Pass を押す、
         // といった取り合いになる。手口まで同じ（RollItemRaw を直接呼ぶ）ので、
         // どちらが先に通るかで結果が変わり、安定しない。
-        if (AutoTreasure.IPC.LazyLootControl.ShouldYield)
+        //
+        // ただし takeOver のときは通す。呼ぶ側が
+        // 「十分待ったが押されなかった」と確かめている。
+        // 譲ったまま誰も押さないと、周回がそこで止まってしまう。
+        if (!takeOver && AutoTreasure.IPC.LazyLootControl.ShouldYield)
             return false;
 
         if (!EzThrottler.Throttle("AutoTreasure.Roll", 600))

@@ -2812,14 +2812,17 @@ internal sealed class RunController : IDisposable
             else
             {
                 // LazyLoot に譲ったが押されなかった場合は、そのことを残す。
-                if (IPC.LazyLootControl.ShouldYield)
+                // LazyLoot に譲ったが押されなかった場合は、譲りを外して押す。
+                var takeOver = IPC.LazyLootControl.ShouldYield;
+
+                if (takeOver)
                 {
                     RecordEvery("roll-takeover-field", 10,
                         $"LazyLoot が {SecondsInState:F0}秒 押さないので、こちらでロットします");
                 }
 
                 // 1回につき1件ずつ処理される。毎フレーム呼ばれるので順に片付く。
-                LootHelper.RollPending(option);
+                LootHelper.RollPending(option, takeOver);
                 _note = isNeed ? "ロット中（Need）" : "ロット中（Pass）";
             }
 
@@ -4393,8 +4396,21 @@ internal sealed class RunController : IDisposable
             if (waited < LazyLootGraceSeconds)
                 return;
 
+            // 譲りを外して押す。外さないと何も起きない。
+            var pressed = LootHelper.RollPending(
+                LootHelper.OptionFor(Plugin.Config.Role), takeOver: true);
+
+            // 押した結果まで残す。
+            //
+            // 「こちらでロットします」だけを残していたら、
+            // 実際には何も起きていないことに気づけなかった（2026-09-22）。
+            // 押せたのか、押したのに残っているのかを分けて記録する。
             RecordEvery("roll-takeover", 10,
-                $"LazyLoot が {waited:F0}秒 押さないので、こちらでロットします");
+                $"LazyLoot が {waited:F0}秒 押さないので、こちらでロットします"
+                + $"（指示={(pressed ? "出せました" : "出せませんでした")}"
+                + $" 中身:{Helpers.LootHelper.Diagnostic()}）");
+
+            return;
         }
 
         LootHelper.RollPending(LootHelper.OptionFor(Plugin.Config.Role));
