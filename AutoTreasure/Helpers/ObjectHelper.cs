@@ -241,6 +241,7 @@ internal static unsafe class ObjectHelper
                 : chara.CurrentHp == 0                ? "× HP が 0"
                 : !o.IsTargetable                     ? "× 触れない"
                 : dist > radius                       ? $"× 遠い（{dist:F1}y）"
+                : IsFriendly(o)                       ? "× 味方（ペット等）"
                                                       : "○ 敵とみなす";
 
             sb.AppendLine($"    DataId {o.BaseId,7}  種別 {chara?.SubKind,3}"
@@ -252,6 +253,32 @@ internal static unsafe class ObjectHelper
             sb.AppendLine("    （BattleNpc が1体もいません）");
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// 殴ってはいけない相手か（ペット・味方）。
+    ///
+    /// フェアリー、カーバンクル、召喚獣、他の人のチョコボなど。
+    /// これらは BattleNpc で、触れるうえに生きているため、
+    /// 触れるかどうかだけでは敵と区別できない。
+    /// </summary>
+    private static bool IsFriendly(IGameObject o)
+    {
+        if (o is not IBattleNpc npc)
+            return false;
+
+        // ペット（フェアリー・カーバンクル・召喚獣）は種別で分かる。
+        //
+        // チョコボ（バディ）に当たる種別は Dalamud の列挙に無いので、
+        // 下の「持ち主がいるか」で拾う。
+        if (npc.SubKind == (byte)BattleNpcSubKind.Pet)
+            return true;
+
+        // 誰かの持ち物なら味方。自分のペットも、仲間のペットも外れる。
+        //
+        // ⚠ 敵の「本体の一部」（実測の種別 5）は持ち主を持たないので、
+        //   ここでは外れない。ボスは今までどおり見つかる。
+        return npc.OwnerId != 0 && npc.OwnerId != 0xE0000000;
     }
 
     private static bool IsEnemyPresent(IGameObject o, float radius)
@@ -280,6 +307,23 @@ internal static unsafe class ObjectHelper
         // 代わりに<b>触れるかどうか</b>で選ぶ。
         // 触れない相手は、そもそも殴れない。
         if (!o.IsTargetable)
+            return false;
+
+        // ⚠ ただし<b>味方は外す</b>（2026-09-22 の報告）。
+        //
+        //   フェアリーやカーバンクル、他の人のチョコボは
+        //   BattleNpc で、触れるうえに生きている。
+        //   種別で絞るのをやめた結果、これらまで「倒す相手」に
+        //   数えるようになっていた。
+        //
+        //   数えるだけなら害は小さいが、<b>狙いを付けて近づく</b>
+        //   処理がこれを使っている。味方を狙ってしまうと、
+        //   動き回るフェアリーを追いかけ続けることになり、
+        //   周回がそこで途切れる。
+        //
+        //   ペットと味方だけを外す。ボスは種別が 1 でなくても
+        //   ペットではないので、これまでどおり見つかる。
+        if (IsFriendly(o))
             return false;
 
         return DistanceToPlayer(o) <= radius;
