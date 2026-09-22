@@ -149,6 +149,20 @@ LazyLoot を入れている場合、ロットはそちらに任せます。</Des
   -->
   <PropertyGroup>
     <DeployDir Condition="'$(Configuration)' == 'Release'">C:\自作プラグイン\AutoTreasure\</DeployDir>
+
+    <!--
+      もう1つの配置先。別PC（rio-pc）の共有フォルダ。
+
+      なぜ2箇所へ置くか:
+        複数PCで同じ版を使うため。ここへ置けば、
+        別PCの Dalamud がそこを見ている限り同じ版が行き渡る。
+
+      共有が見えないときは黙って飛ばす。
+        別PCの電源が落ちている、Tailscale が繋がっていない等は
+        日常的に起きる。そのたびにビルドが失敗しては困るので、
+        「置けたら置く」扱いにする。
+    -->
+    <ShareDeployDir Condition="'$(Configuration)' == 'Release'">\\rio-pc\DevPlugins\AutoTreasure\</ShareDeployDir>
     <DeployDir Condition="'$(Configuration)' == 'Dist'">C:\自作プラグイン\AutoTreasure_配布用\</DeployDir>
   </PropertyGroup>
 
@@ -226,4 +240,66 @@ LazyLoot を入れている場合、ロットはそちらに任せます。</Des
              Importance="high"
              Text="配置しました: $(DeployDir)（起動中のキャラクターは自動で読み直します）" />
   </Target>
+
+  <!--
+    別PCの共有フォルダへも同じものを置く。
+
+    共有が見えないときは何もしない。
+    別PCが落ちていてもこちらのビルドは止めない。
+  -->
+  <Target Name="DeployToShare" AfterTargets="Build"
+          Condition="'$(ShareDeployDir)' != '' And Exists('$(ShareDeployDir)')">
+
+    <ItemGroup>
+      <ShareSupport Include="$(OutputPath)$(AssemblyName).json"
+                    Condition="Exists('$(OutputPath)$(AssemblyName).json')" />
+      <ShareSupport Include="bin\Release\$(AssemblyName).json"
+                    Condition="!Exists('$(OutputPath)$(AssemblyName).json') And Exists('bin\Release\$(AssemblyName).json')" />
+      <ShareSupport Include="$(OutputPath)$(AssemblyName).deps.json"
+                    Condition="Exists('$(OutputPath)$(AssemblyName).deps.json')" />
+      <ShareSupport Include="$(OutputPath)ECommons.dll"
+                    Condition="Exists('$(OutputPath)ECommons.dll')" />
+      <ShareImages Include="..\images\icon.png" Condition="Exists('..\images\icon.png')" />
+    </ItemGroup>
+
+    <MakeDir Directories="$(ShareDeployDir)" />
+    <MakeDir Directories="$(ShareDeployDir)images\" />
+
+    <!--
+      こちらでも DLL を最後に単独で置く。
+      理由は上の配置と同じ（まとめて置くと読み直しを見送られる）。
+    -->
+    <Copy SourceFiles="@(ShareSupport)"
+          DestinationFolder="$(ShareDeployDir)"
+          ContinueOnError="true" />
+
+    <Copy SourceFiles="@(ShareImages)"
+          DestinationFolder="$(ShareDeployDir)images\"
+          ContinueOnError="true" />
+
+    <Exec Command="ping -n 2 127.0.0.1 &gt; nul" ContinueOnError="true" />
+
+    <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll"
+          DestinationFolder="$(ShareDeployDir)"
+          ContinueOnError="true">
+      <Output TaskParameter="CopiedFiles" ItemName="ShareCopied" />
+    </Copy>
+
+    <Message Condition="'@(ShareCopied)' != ''"
+             Importance="high"
+             Text="共有フォルダへも配置しました: $(ShareDeployDir)" />
+    <Warning Condition="'@(ShareCopied)' == ''"
+             Text="共有フォルダへ配置できませんでした: $(ShareDeployDir)（相手が掴んでいる可能性があります）" />
+  </Target>
+
+  <!--
+    共有が見えないときに、その旨だけ伝える。
+    失敗ではないので Message にとどめる。
+  -->
+  <Target Name="ShareUnreachableNotice" AfterTargets="Build"
+          Condition="'$(ShareDeployDir)' != '' And !Exists('$(ShareDeployDir)')">
+    <Message Importance="high"
+             Text="共有フォルダが見えないため、そちらへの配置は飛ばしました: $(ShareDeployDir)" />
+  </Target>
+
 </Project>
