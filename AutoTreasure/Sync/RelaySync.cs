@@ -173,6 +173,24 @@ internal sealed class RelaySync : ISyncTransport
     }
 
     /// <summary>
+    /// サーバーに断られた内容を1つ取り出す。
+    ///
+    /// 記録に残すためのもの。動きには使わない。
+    /// パイプには断りという概念が無いので、こちらだけが持つ。
+    /// </summary>
+    internal bool TryTakeProblem(out string problem)
+    {
+        RelayCoordinator? relay;
+        lock (_stateLock) relay = _relay;
+
+        if (relay is not null)
+            return relay.TryTakeProblem(out problem);
+
+        problem = string.Empty;
+        return false;
+    }
+
+    /// <summary>
     /// 中継から届いた文字列を SyncMessage へ戻す。
     ///
     /// 読み取り（TryParse）はパイプと同じものを使う。

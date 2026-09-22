@@ -28,9 +28,22 @@
     <Compile Include="..\..\AutoTreasure\Sync\SyncMessage.cs"
              Link="Production\SyncMessage.cs" />
 
-    <!-- 本番の封筒の形。サーバーと共有している正本。 -->
-    <Compile Include="..\..\AutoTreasure\Sync\Relay\RelayProtocol.cs"
-             Link="Production\RelayProtocol.cs" />
+    <!--
+      封筒の形は、サーバーのプロジェクト参照から来る（同じ正本）。
+      ここで重ねて取り込むと二重定義になるので入れない。
+    -->
+
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      中継サーバーそのもの。権限判定（IsAllowedFromWorker）を試すため。
+
+      ⚠ ここは Dalamud に依存していないので参照できる。
+        プラグイン本体は Dalamud.NET.Sdk なので参照できない
+        （だから上は Compile Include で取り込んでいる）。
+    -->
+    <ProjectReference Include="..\..\AutoTreasure.RelayServer\AutoTreasure.RelayServer.csproj" />
   </ItemGroup>
 
   <ItemGroup>

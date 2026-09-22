@@ -226,14 +226,22 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>
     /// 中継サーバーの URL（wss://...）。
     ///
-    /// <b>既定は空。</b>
-    /// 配布物に自分のサーバーを埋めると、他人の利用が
-    /// すべて自分の VPS に来てしまうため。
-    /// 一緒に回る人には、この値を手渡しする。
+    /// <b>既定で入れてある。</b> 利用者に入力させない。
+    /// MogColle と同じで、「インターネット」を選んだら
+    /// そのまま繋がるのが当たり前の振る舞い。
     ///
-    /// 例: wss://estelldprereleaserepo.net/treasure/ws
+    /// 別のサーバーを使いたいときだけ、ここを書き換える。
+    /// 空にすると「このPCだけ」で動く。
     /// </summary>
-    public string RelayUrl { get; set; } = "";
+    public string RelayUrl { get; set; } = DefaultRelayUrl;
+
+    /// <summary>
+    /// 既定の中継サーバー。
+    ///
+    /// ⚠ 設定ファイルには保存された値が残るので、ここを変えても
+    ///   既に使っている人には届かない。移すときは Migrate で読み替える。
+    /// </summary>
+    public const string DefaultRelayUrl = "wss://estelldprereleaserepo.net/treasure/ws";
 
     /// <summary>
     /// 参加するときの招待（ATR1:...）。
@@ -491,6 +499,21 @@ public sealed class Configuration : IPluginConfiguration
         if (BmrPreset is "AutoDuty Passive LB" or "AutoDuty Passive" or "Treasure Passive" or "Treasure Passive 2" or "Treasure Passive 3")
         {
             BmrPreset = IPC.CombatPlugins.RunPresetName;
+            changed = true;
+        }
+
+        // 中継サーバーのURLが空なら、既定を入れる。
+        //
+        // <b>既定値を変えても、保存済みの設定には届かない。</b>
+        // 0.2.0.0 の最初の版は空を既定にしていたので、
+        // そのとき起動した人の設定ファイルには "" が残っている。
+        // 空のままだと「インターネット」を選んでも繋がらない。
+        //
+        // 自分で消して「このPCだけ」にしている人は、
+        // そもそも繋ぎ方が LocalPipe になっているので上書きしない。
+        if (string.IsNullOrWhiteSpace(RelayUrl) && SyncTransport == SyncTransportKind.Internet)
+        {
+            RelayUrl = DefaultRelayUrl;
             changed = true;
         }
 

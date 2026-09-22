@@ -59,6 +59,16 @@ internal sealed class RelayCoordinator : IDisposable
     private readonly ConcurrentQueue<string> inbox = new();
     private readonly CancellationTokenSource cts = new();
 
+    /// <summary>
+    /// サーバーに断られた内容。記録に残すために溜める。
+    ///
+    /// <b>これが無いと、断られたことに気づけない。</b>
+    /// 実際、地図役がメンバーのとき座標が ROLE_FORBIDDEN で
+    /// 弾かれていたが、画面の状態がすぐ上書きされるため
+    /// 「なぜか全員が動かない」としか見えなかった（2026-09-22）。
+    /// </summary>
+    private readonly ConcurrentQueue<string> problems = new();
+
     /// <summary>送る担当。同じ口への同時送信はフレームが壊れるので1本にまとめる。</summary>
     private readonly SemaphoreSlim sendGate = new(1, 1);
 
@@ -135,6 +145,14 @@ internal sealed class RelayCoordinator : IDisposable
 
     /// <summary>受け取った合図を1つ取り出す。</summary>
     internal bool TryReceive(out string line) => this.inbox.TryDequeue(out line!);
+
+    /// <summary>
+    /// サーバーに断られた内容を1つ取り出す。
+    ///
+    /// 記録に残すためのもの。動きには使わない。
+    /// </summary>
+    internal bool TryTakeProblem(out string problem)
+        => this.problems.TryDequeue(out problem!);
 
     /// <summary>
     /// ルームから誰かを外すよう、サーバーへ頼む。取りまとめ役だけができる。
@@ -374,6 +392,17 @@ internal sealed class RelayCoordinator : IDisposable
 
             case RelayMessageType.Error:
                 this.status = RelayError.Describe(msg.ErrorCode);
+
+                // 断られたことを記録に残す。
+                //
+                // 画面の状態はすぐ次の表示で上書きされるので、
+                // それだけでは原因を追えない。
+                if (this.problems.Count < 50)
+                {
+                    this.problems.Enqueue(
+                        $"中継サーバーに断られました（{msg.ErrorCode}）"
+                        + RelayError.Describe(msg.ErrorCode));
+                }
 
                 // 戻れなかったら、覚えていることを捨てて入り直す。
                 //

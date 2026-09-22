@@ -380,13 +380,23 @@ public sealed class RoomManager(InviteBoard invites, ILogger<RoomManager> log)
     /// <summary>
     /// 参加側が送ってよい中身か。
     ///
-    /// AutoTreasure は PipeSync の時点で「止める（Abort）は誰でも送れる」
-    /// という作りになっている。メンバーが異常に気づいたとき、
-    /// リーダーの判断を待たずに全体を止められる必要があるため。
+    /// <b>地図役はパーティリーダーとは限らない。</b>
+    /// ゲームの仕組み上、古ぼけた地図S5 は誰でも使える。
+    /// 使った人がその周回の「地図役」になり、
+    /// <b>その人しか宝の場所・魔紋の中の宝箱と扉を知らない</b>。
     ///
-    /// 逆に Treasure（宝の場所）・StepGo（次へ進め）・Begin（開始）・
-    /// DoorSide・VaultChest・VaultDoor・MapTurnSetting はリーダーだけが送る。
-    /// ここを緩めると、誰でも全体を動かせてしまう。
+    /// ⚠ ここを「リーダーだけ」にすると、地図役がメンバーだったとき
+    ///   座標が誰にも届かず、メンバー全員がエーテライトで棒立ちになる。
+    ///   実際にそうなった（2026-09-22）。
+    ///
+    /// そのため、地図役が配る種類（Treasure / VaultChest / VaultDoor /
+    /// DoorSide）はメンバーからも通す。
+    ///
+    /// 逆に<b>全体を動かす号令</b>は通さない。
+    ///   Begin        … 開始。押すのはリーダー
+    ///   StepGo       … 次へ進め。待ち合わせを抜ける判断はリーダー
+    ///   MapTurnSetting … 順番の決め。決めるのはリーダー
+    /// ここを緩めると、誰でも他人の周回を動かせてしまう。
     ///
     /// ⚠ 送ってよい種類の一覧は、SyncKind を足すたびに見直す。
     ///   足し忘れると、そのメッセージだけメンバーから送れず、
@@ -399,8 +409,11 @@ public sealed class RoomManager(InviteBoard invites, ILogger<RoomManager> log)
         //   AutoTreasure は文字列と決まっているので、読めない時点でおかしい。
         var kind = ReadKind(envelope);
 
-        return kind is "StepDone" or "Ping" or "MapUser"
-                    or "MapUnavailable" or "Abort";
+        return kind is
+            // 誰でも送るもの
+            "StepDone" or "Ping" or "MapUser" or "MapUnavailable" or "Abort"
+            // 地図役が配るもの（地図役はメンバーのことがある）
+            or "Treasure" or "VaultChest" or "VaultDoor" or "DoorSide";
     }
 
     /// <summary>

@@ -412,24 +412,20 @@ internal sealed class MainWindow : Window
     {
         var cfg = Plugin.Config;
 
+        // 繋ぎ方は<b>常に出す。役割でも折りたたみでも隠さない。</b>
+        //
+        // 隠すと、繋がっていないときに確かめる場所が無くなる。
+        // 1台ずつ設定するものなので、どの機からも見えている必要がある。
+        DrawSyncTransport(cfg);
+
+        if (cfg.Role == ClientRole.Member)
+            return;
+
         if (!ImGui.CollapsingHeader("設定"))
             return;
 
         ImGui.Indent();
-
-        // 繋ぎ方だけは、メンバーにも出す。
-        //
-        // <b>これが無いと、メンバーは中継サーバーのURLを入れられない。</b>
-        // 繋ぎ方は1台ずつ設定するものなので、
-        // リーダーが設定しても他の機には伝わらない。
-        //
-        // 他の設定（周回の続け方・地図の順番など）は
-        // リーダーが決めて配るので、これまでどおり出さない。
-        DrawSyncTransport(cfg);
-
-        if (cfg.Role != ClientRole.Member)
-            DrawCommonSettings();
-
+        DrawCommonSettings();
         ImGui.Unindent();
     }
 
@@ -472,34 +468,28 @@ internal sealed class MainWindow : Window
         {
             ImGui.SetTooltip(
                 "別々の家・別々の回線からでも足並みを揃えられる。\n"
-                + "中継サーバーのURLが要る。");
+                + "選ぶだけで繋がる（URLの入力は要りません）。");
         }
 
         if (cfg.SyncTransport == SyncTransportKind.Internet)
         {
-            var url = cfg.RelayUrl ?? "";
-
-            ImGui.SetNextItemWidth(360f);
-            if (ImGui.InputText("中継サーバーのURL", ref url, 200))
-            {
-                cfg.RelayUrl = url;
-                cfg.Save();
-            }
-            if (ImGui.IsItemHovered())
-            {
-                ImGui.SetTooltip(
-                    "例: wss://例えば.net/treasure/ws\n"
-                    + "一緒に回る人と同じURLにする。");
-            }
-
-            // URL が無いなら、いま何が起きているかをはっきり書く。
+            // URL は既定で入っている。ふだんは見せない。
             //
-            // 「インターネットを選んだのに繋がらない」と見えると、
-            // 原因が分からないまま時間を使わせてしまう。
+            // 入力を求めると「何を入れればいいのか」で止まってしまう。
+            // 選んだらそのまま繋がるのが当たり前の振る舞い。
             if (string.IsNullOrWhiteSpace(cfg.RelayUrl))
             {
+                // 消してしまった人だけ、戻す手立てを出す。
                 ImGui.TextColored(new Vector4(1f, 0.8f, 0.3f, 1f),
-                    "URL が空のため、いまは「このPCだけ」で動いています。");
+                    "中継サーバーのURLが空です。");
+
+                ImGui.SameLine(0, 8);
+
+                if (ImGui.SmallButton("既定に戻す"))
+                {
+                    cfg.RelayUrl = Configuration.DefaultRelayUrl;
+                    cfg.Save();
+                }
             }
             else
             {

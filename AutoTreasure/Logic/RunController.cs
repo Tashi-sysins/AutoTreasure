@@ -5009,6 +5009,17 @@ internal sealed class RunController : IDisposable
 
     private void ReceiveMessages()
     {
+        // 中継サーバーに断られていたら、まず記録に残す。
+        //
+        // <b>これが無いと、断られたことに気づけない。</b>
+        // 実際、地図役がメンバーのとき座標が弾かれていたのに、
+        // 「なぜか全員がエーテライトで動かない」としか見えなかった。
+        if (_sync is RelaySync relay)
+        {
+            while (relay.TryTakeProblem(out var problem))
+                Record(problem);
+        }
+
         while (_sync.TryReceive(out var message))
         {
             switch (message.Kind)
