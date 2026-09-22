@@ -120,6 +120,14 @@ internal sealed class RunController : IDisposable
     /// <summary>宝箱の前で仲間が集まるのを待つ時間。最下層では待たない。</summary>
     private const double ChestGatherSeconds = 1.0;
 
+    /// <summary>
+    /// 魔紋の中で、宝箱より討伐を先にする敵の範囲。
+    ///
+    /// 区画は狭いので、フィールドの 70y ほど広く見る必要はない。
+    /// 広すぎると、隣の部屋の敵で手が止まる。
+    /// </summary>
+    private const float VaultEnemyRange = 30f;
+
     /// <summary>扉の先へ歩くのにかける上限。</summary>
     private const double WalkPastDoorSeconds = 25.0;
 
@@ -4341,6 +4349,20 @@ internal sealed class RunController : IDisposable
 
     private void HandleVaultChest(IGameObject chest)
     {
+        // 敵が出ているあいだは、宝箱に触らない。
+        //
+        // <b>触っても開かない。</b>
+        // 宝箱を開けると敵が湧く仕掛けなので、湧いている最中は
+        // アクセスが通らない。それでも毎フレーム触り続けていた。
+        //
+        // 無駄なだけでなく、触る操作が戦闘の動きと噛み合わない。
+        // 先に倒してから開ける。戦闘は BMR に任せてあるので、
+        // ここでは手を出さずに待つだけでよい。
+        //
+        // ⚠ 位置を覚える処理より先に置かない。
+        //   宝箱の位置は、扉へ進む向きを決めるのに要る。
+        //   戦闘中に返してしまうと、覚える機会を逃す。
+
         // 宝箱は開けると消える。消える前に位置を覚えておく。
         //
         // 扉が開いたあと、「宝箱 → 扉」の向きへ進んでワープ床を踏む。
@@ -4393,7 +4415,18 @@ internal sealed class RunController : IDisposable
         // 離れている仲間がいると置いていくことになるため、一呼吸おく。
         //
         // 最下層では待たない。次の区画へ進まないので、散らばっていても困らない。
-        if (!VaultRoutine.IsFinalRoom())
+        // 待つのは<b>魔紋の宝箱だけ</b>にする。
+        //
+        // 開けると敵が湧き、扉へ進む流れになるので、
+        // 離れている仲間を置いていかないよう一呼吸おく。
+        //
+        // それ以外の宝箱（区画に散らばっているもの）は、
+        // 開けても隊列が動かない。待つ意味がないので、
+        // 見つけた順にどんどん開ける。
+        //
+        // 最下層でも待たない。次の区画へ進まないので、
+        // 散らばっていても困らない。
+        if (!VaultRoutine.IsFinalRoom() && VaultRoutine.IsVaultChest(chest))
         {
             _chestArrivedAt ??= DateTime.UtcNow;
 
@@ -4429,6 +4462,20 @@ internal sealed class RunController : IDisposable
         }
 
         MovementHelper.Dismount();
+
+        // 敵が出ているなら、触らずに倒すのを待つ。
+        //
+        // 位置はもう覚えてあるので、ここで見送っても支障はない。
+        // 倒し終われば、次のフレームでそのまま開けに入る。
+        if (PlayerHelper.InCombat || ObjectHelper.HasLivingEnemyWithin(VaultEnemyRange))
+        {
+            RecordEvery("vault-chest-combat", 5,
+                "敵が出ているので、宝箱より討伐を先にします");
+
+            _note = "敵を倒しています（宝箱はそのあと）";
+            return;
+        }
+
         ObjectHelper.InteractUntilNotTargetable(chest, "AutoTreasure.VaultChest");
         _note = "宝箱を開けています";
 
