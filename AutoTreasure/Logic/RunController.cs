@@ -128,6 +128,15 @@ internal sealed class RunController : IDisposable
     /// </summary>
     private const float VaultEnemyRange = 30f;
 
+    /// <summary>
+    /// LazyLoot に任せて待つ時間。過ぎたら自分で押す。
+    ///
+    /// LazyLoot は既定で 1.5〜3.0 秒おいてから押す。
+    /// その倍以上を見ておけば、正常に働いているときに
+    /// 横から取り合うことはない。
+    /// </summary>
+    private const double LazyLootGraceSeconds = 8.0;
+
     /// <summary>扉の先へ歩くのにかける上限。</summary>
     private const double WalkPastDoorSeconds = 25.0;
 
@@ -2781,7 +2790,12 @@ internal sealed class RunController : IDisposable
             //
             // LazyLoot はわざと間を置いてから押す（既定で 1.5〜3.0 秒）。
             // こちらが先に押してしまうと取り合いになるので、手を出さない。
-            if (IPC.LazyLootControl.ShouldYield)
+            // ⚠ 譲ったまま誰も押さないことがある（2026-09-22 実測）。
+            //   魔紋の中と同じで、待っても押されないならこちらが押す。
+            var yieldToLazy = IPC.LazyLootControl.ShouldYield
+                           && SecondsInState < LazyLootGraceSeconds;
+
+            if (yieldToLazy)
             {
                 _note = "ロット中（LazyLoot に任せています）";
 
@@ -2797,13 +2811,21 @@ internal sealed class RunController : IDisposable
             }
             else
             {
+                // LazyLoot に譲ったが押されなかった場合は、そのことを残す。
+                if (IPC.LazyLootControl.ShouldYield)
+                {
+                    RecordEvery("roll-takeover-field", 10,
+                        $"LazyLoot が {SecondsInState:F0}秒 押さないので、こちらでロットします");
+                }
+
                 // 1回につき1件ずつ処理される。毎フレーム呼ばれるので順に片付く。
                 LootHelper.RollPending(option);
                 _note = isNeed ? "ロット中（Need）" : "ロット中（Pass）";
             }
 
             // 何かの理由で処理しきれない場合に備えて、上限を設ける。
-            var timeout = IPC.LazyLootControl.ShouldYield ? LootWaitGiveUpSeconds : RollTimeoutSeconds;
+            // 受け皿が働くので、譲ったまま長く待つ必要はない。
+            var timeout = yieldToLazy ? LootWaitGiveUpSeconds : RollTimeoutSeconds;
             if (SecondsInState > timeout)
             {
                 // 何が残ったまま諦めたのかを残す。
@@ -4327,12 +4349,21 @@ internal sealed class RunController : IDisposable
     }
 
     /// <summary>ロットが出ていれば処理する。出ていなければ何もしない。</summary>
+    /// <summary>ロットが出たままになっている時刻。押されたら消す。</summary>
+    private DateTime? _rollPendingSince;
+
     private void RollIfPending()
     {
         if (!Plugin.Config.AutoRoll)
             return;
 
-        // LazyLoot が入っているなら、そちらに任せる。
+        if (!LootHelper.HasPendingLoot())
+        {
+            _rollPendingSince = null;
+            return;
+        }
+
+        // LazyLoot が入っているなら、まずそちらに任せる。
         //
         // 両方が動くと、こちらが Need を押す前に LazyLoot が Pass を押す、
         // といった取り合いになる。手口まで同じ（RollItemRaw を直接呼ぶ）なので、
@@ -4341,10 +4372,32 @@ internal sealed class RunController : IDisposable
         // LazyLoot はロット専用のプラグインで、こちらより作り込まれている。
         // 入っているなら、利用者の設定どおりに動く方へ譲る。
         if (IPC.LazyLootControl.ShouldYield)
-            return;
+        {
+            _rollPendingSince ??= DateTime.UtcNow;
 
-        if (LootHelper.HasPendingLoot())
-            LootHelper.RollPending(LootHelper.OptionFor(Plugin.Config.Role));
+            var waited = (DateTime.UtcNow - _rollPendingSince.Value).TotalSeconds;
+
+            // ⚠ 譲ったまま<b>誰も押さない</b>ことがある（2026-09-22 実測）。
+            //   魔紋の中で地図役の画面にロット窓が開き、
+            //   残り時間だけが減って周回が止まった。
+            //   窓が出るのは宝箱を開けた本人だけなので、
+            //   地図役だけロットされないように見えていた。
+            //
+            //   LazyLoot の設定は問題なく（制限は全部OFF・FulfEnabled=True）、
+            //   停止の知らせも出ていない。なぜ押さないかは未解明。
+            //
+            //   原因が相手側にあっても周回は止めたくないので、
+            //   待っても押されないときだけ、こちらが押す。
+            //   LazyLoot が正しく働く場面では、その前に窓が消えるので
+            //   ここへは来ない（取り合いにならない）。
+            if (waited < LazyLootGraceSeconds)
+                return;
+
+            RecordEvery("roll-takeover", 10,
+                $"LazyLoot が {waited:F0}秒 押さないので、こちらでロットします");
+        }
+
+        LootHelper.RollPending(LootHelper.OptionFor(Plugin.Config.Role));
     }
 
     private void HandleVaultChest(IGameObject chest)
