@@ -4432,12 +4432,23 @@ internal sealed class RunController : IDisposable
         //   宝箱の位置は、扉へ進む向きを決めるのに要る。
         //   戦闘中に返してしまうと、覚える機会を逃す。
 
-        // 宝箱は開けると消える。消える前に位置を覚えておく。
+        // 革袋は「拾うだけ」なので、覚え書きには触らない。
         //
-        // 扉が開いたあと、「宝箱 → 扉」の向きへ進んでワープ床を踏む。
-        // ここで覚えないと向きが決まらず、扉の先へ進めない。
-        _chestPosition = chest.Position;
-        _chestBaseId = chest.BaseId;
+        // ⚠ ここで上書きすると、扉へ進む向きが狂う。
+        //   向きは「宝箱 → 扉」で決めているので、
+        //   起点が革袋の位置になると見当違いの方向へ歩く。
+        //   仲間へ位置を配る処理も、革袋では動かさない。
+        var isPickupOnly = VaultRoutine.IsPouch(chest);
+
+        if (!isPickupOnly)
+        {
+            // 宝箱は開けると消える。消える前に位置を覚えておく。
+            //
+            // 扉が開いたあと、「宝箱 → 扉」の向きへ進んでワープ床を踏む。
+            // ここで覚えないと向きが決まらず、扉の先へ進めない。
+            _chestPosition = chest.Position;
+            _chestBaseId = chest.BaseId;
+        }
 
         // 仲間にも位置を伝える。
         //
@@ -4495,7 +4506,7 @@ internal sealed class RunController : IDisposable
         //
         // 最下層でも待たない。次の区画へ進まないので、
         // 散らばっていても困らない。
-        if (!VaultRoutine.IsFinalRoom() && VaultRoutine.IsVaultChest(chest))
+        if (!isPickupOnly && !VaultRoutine.IsFinalRoom() && VaultRoutine.IsVaultChest(chest))
         {
             _chestArrivedAt ??= DateTime.UtcNow;
 
@@ -4546,7 +4557,10 @@ internal sealed class RunController : IDisposable
         }
 
         ObjectHelper.InteractUntilNotTargetable(chest, "AutoTreasure.VaultChest");
-        _note = "宝箱を開けています";
+        _note = isPickupOnly ? "革袋を拾っています" : "宝箱を開けています";
+
+        if (isPickupOnly)
+            RecordEvery("pouch-pickup", 5, "革袋を拾っています");
 
         // 開けたあとのロットは、この段階のはじめ（RollIfPending）で片付けている。
 

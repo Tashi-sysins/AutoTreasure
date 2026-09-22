@@ -331,12 +331,27 @@ internal static class VaultRoutine
         if (chest != null)
             return VaultAction.OpenChest;
 
-        // 3. 宝箱が無ければ扉を探す。
+        // 3. 宝箱を開け終わったら、落ちている革袋を拾う。
+        //
+        //    <b>扉へ進む前に拾う。</b>
+        //    扉をくぐると次の区画へ移り、二度と戻れない。
+        //    実際、拾わないまま次の階層へ進んでいた（2026-09-22）。
+        //
+        //    ⚠ ここより前（FindChest）では革袋を除いてある。
+        //      除かないと、先へ進む宝箱と取り違えて
+        //      革袋へ向かい続ける（2026-09-18 に最下層で実測）。
+        //      「道を決める相手」からは外し、
+        //      「開け終わったあとに拾う相手」としてだけ見る。
+        chest = FindPouch();
+        if (chest != null)
+            return VaultAction.OpenChest;
+
+        // 4. 宝箱も革袋も無ければ扉を探す。
         door = FindDoor(preferRightDoor);
         if (door != null)
             return VaultAction.GoToDoor;
 
-        // 4. 「簡易移動」は次へ進む道ではない（触れると手前へ戻される）。
+        // 5. 「簡易移動」は次へ進む道ではない（触れると手前へ戻される）。
         //    見つけても乗らない。ここでは「動かずに待つ」を選ぶ。
         //
         //    扉が開いたあと、次の部屋へはワープ床ではなく
@@ -346,7 +361,7 @@ internal static class VaultRoutine
         if (warp != null)
             return VaultAction.Wait;
 
-        // 5. どれも見えない。
+        // 6. どれも見えない。
         //
         // ただし、この瞬間だけ見えていないことがある。
         // ムービーが始まる直前、扉も宝箱も先に消える。
@@ -538,6 +553,20 @@ internal static class VaultRoutine
     /// 番号が隣り合っているので、まとめて除きたくなるが間違い。
     /// 792 を除くと、最下層で宝箱を開けずに出ていくことになる。
     /// </summary>
+    /// <summary>
+    /// 近くに落ちている革袋を返す。無ければ null。
+    ///
+    /// <b>道を決めるのには使わない。</b>
+    /// 先へ進む宝箱と取り違えると、革袋へ向かい続けて
+    /// 周回が止まる（2026-09-18 に最下層で実測）。
+    /// 宝箱を開け終わったあと、扉へ進む前にだけ見る。
+    /// </summary>
+    internal static IGameObject? FindPouch()
+        => ObjectHelper.GetTreasures()
+            .Where(IsPouch)
+            .OrderBy(ObjectHelper.DistanceToPlayer)
+            .FirstOrDefault(o => ObjectHelper.DistanceToPlayer(o) <= SearchRadius);
+
     internal static bool IsPouch(IGameObject? o)
         => o != null
         && o.BaseId == 791;
