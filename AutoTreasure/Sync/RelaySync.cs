@@ -32,6 +32,29 @@ internal sealed class RelaySync : ISyncTransport
 
     private RelayCoordinator? _relay;
     private volatile SyncMode _mode;
+    private string _lastRequestedKey = "未取得";
+    private sealed record GameIdentity(ulong ContentId, string Name, string PartyKey);
+    private volatile GameIdentity _identity = new(0, "", "");
+
+    // Dalamud のゲーム情報はフレームスレッドで読む。WebSocket の受信スレッドでは読まない。
+    private void CaptureIdentity()
+        => _identity = new(Svc.PlayerState.ContentId, Helpers.PlayerHelper.Name, PartyKey.Current());
+
+    internal string Diagnostic
+    {
+        get
+        {
+            var key = PartyKey.Current();
+            return $"mode={_mode}, party={key[..Math.Min(12, key.Length)]}, requested={_lastRequestedKey}, status={StatusText}";
+        }
+    }
+
+    private string ResolvePartyKey()
+    {
+        var key = _identity.PartyKey;
+        _lastRequestedKey = string.IsNullOrEmpty(key) ? "空" : key[..12];
+        return key;
+    }
 
     internal RelaySync(string url)
     {
@@ -115,6 +138,7 @@ internal sealed class RelaySync : ISyncTransport
     private void Start(SyncMode mode)
     {
         Stop();
+        CaptureIdentity();
 
         // URL が無いまま繋ごうとしても無駄に再試行を繰り返すだけ。
         // 状態を出して止めておく（StatusText が理由を伝える）。
@@ -134,7 +158,7 @@ internal sealed class RelaySync : ISyncTransport
                 clientId: _clientId,
                 sessionId: _sessionId,
                 describe: Describe,
-                partyKey: PartyKey.Current);
+                partyKey: ResolvePartyKey);
         }
     }
 
@@ -166,6 +190,7 @@ internal sealed class RelaySync : ISyncTransport
 
     public bool TryReceive(out SyncMessage message)
     {
+        CaptureIdentity();
         // 先に、中継から届いた文字列をいつもの形へ戻しておく。
         Drain();
 
@@ -218,11 +243,12 @@ internal sealed class RelaySync : ISyncTransport
     /// エリア移動中に 0 になることがあるが、それで困らない作りにしてある
     /// （サーバーは身元をこの接続のものとして扱う）。
     /// </summary>
-    private static (ulong, string) Describe()
+    private (ulong, string) Describe()
     {
         try
         {
-            return (Svc.PlayerState.ContentId, Helpers.PlayerHelper.Name);
+            var identity = _identity;
+            return (identity.ContentId, identity.Name);
         }
         catch
         {

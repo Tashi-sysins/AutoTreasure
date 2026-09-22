@@ -17,7 +17,7 @@ public sealed class MemberSession
     /// 合鍵そのものは持たない。持つと、サーバーが覗かれたとき
     /// 全員の合鍵が漏れる。
     /// </summary>
-    public required byte[] ResumeTokenHash { get; init; }
+    public required byte[] ResumeTokenHash { get; set; }
 
     public string ClientId { get; set; } = string.Empty;
     public string SessionId { get; set; } = string.Empty;
@@ -101,7 +101,7 @@ public sealed class RoomState
     public required string RoomCode { get; init; }
 
     /// <summary>参加に要る合鍵のハッシュ。</summary>
-    public required byte[] JoinTokenHash { get; init; }
+    public required byte[] JoinTokenHash { get; set; }
 
     public required string LeaderMemberId { get; init; }
 

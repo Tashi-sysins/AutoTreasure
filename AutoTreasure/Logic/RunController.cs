@@ -21,6 +21,10 @@ namespace AutoTreasure.Logic;
 /// </summary>
 internal sealed class RunController : IDisposable
 {
+    private readonly CbtControl _cbt = new();
+    private long _nextLootDiagnostic;
+    private string? _lastLootDiagnostic;
+    private string? _lastRelayDiagnostic;
     /// <summary>
     /// 仲間を待つ上限。
     ///
@@ -1054,6 +1058,7 @@ internal sealed class RunController : IDisposable
 
         // 戦闘プラグインを、周回に合った設定にしておく。
         // 手で切り替えさせると、3台のうち1台だけ忘れる事故が起きる。
+        _cbt.Begin();
         ApplyCombatSettings();
 
         // LazyLoot が入っているなら、ロットはそちらに任せる。
@@ -1246,6 +1251,7 @@ internal sealed class RunController : IDisposable
     /// <param name="tellOthers">仲間にも伝えるか。</param>
     internal void Stop(string reason = "", bool tellOthers = false)
     {
+        _cbt.End();
         // 先に伝える。
         // 自分の後片付けで時間がかかっても、合図だけは出ているようにする。
         if (tellOthers)
@@ -1449,10 +1455,32 @@ internal sealed class RunController : IDisposable
     /// <summary>毎フレーム呼ぶ。</summary>
     internal void Tick()
     {
+        _cbt.Tick();
         ReceiveMessages();
 
         if (!PlayerHelper.IsValid)
             return;
+
+        if (Environment.TickCount64 >= _nextLootDiagnostic)
+        {
+            _nextLootDiagnostic = Environment.TickCount64 + 1000;
+            if (_sync is RelaySync relayDiagnostic)
+            {
+                var connection = relayDiagnostic.Diagnostic;
+                if (connection != _lastRelayDiagnostic)
+                {
+                    _lastRelayDiagnostic = connection;
+                    Record($"インターネット接続診断: {connection}");
+                }
+            }
+            var diagnostic = LazyLootControl.Diagnostic() + "; " + LootHelper.Diagnostic();
+            if (diagnostic != _lastLootDiagnostic)
+            {
+                _lastLootDiagnostic = diagnostic;
+                Record($"LazyLoot 診断 [{PlayerHelper.Name}]: {diagnostic}");
+                Svc.Log.Information($"[AutoTreasure] LazyLoot 診断 [{PlayerHelper.Name}]: {diagnostic}");
+            }
+        }
 
         // パーティの状態を見て、役割を合わせる。
         // 動いていない間も見ておく。始める前に正しくしておきたいため。
@@ -2748,6 +2776,16 @@ internal sealed class RunController : IDisposable
             if (IPC.LazyLootControl.ShouldYield)
             {
                 _note = "ロット中（LazyLoot に任せています）";
+
+                // 任せているあいだ、実際のロットの中身を残す。
+                //
+                // <b>1台だけ自動ロットされない</b>という報告があり、
+                // 設定は4台とも同一だと分かっている（診断で確認ずみ）。
+                // 残るのは「その台にロットが見えているか」「どの状態か」。
+                // それはここでしか分からない。
+                RecordEvery("roll-yield", 5,
+                    $"ロット待ち（LazyLoot に任せて {SecondsInState:F0}秒）"
+                    + $" 中身:{Helpers.LootHelper.Diagnostic()}");
             }
             else
             {
@@ -2760,7 +2798,11 @@ internal sealed class RunController : IDisposable
             var timeout = IPC.LazyLootControl.ShouldYield ? LootWaitGiveUpSeconds : RollTimeoutSeconds;
             if (SecondsInState > timeout)
             {
-                Svc.Log.Warning("ロットが終わりませんでした。次へ進みます。");
+                // 何が残ったまま諦めたのかを残す。
+                Record($"ロットが終わりませんでした（{SecondsInState:F0}秒）。次へ進みます"
+                    + $" 任せ先={(IPC.LazyLootControl.ShouldYield ? "LazyLoot" : "自分")}"
+                    + $" 中身:{Helpers.LootHelper.Diagnostic()}");
+
                 FinishFieldPhase();
             }
             return;
@@ -2886,6 +2928,7 @@ internal sealed class RunController : IDisposable
 
         if (!Plugin.Config.ContinuousRuns)
         {
+            if (!VaultRoutine.IsInsideVault()) _cbt.End();
             _note = "1周終わりました";
             return;
         }
@@ -5503,6 +5546,8 @@ internal sealed class RunController : IDisposable
 
         Record($"段階: {_state.ToJapanese()} → {next.ToJapanese()}");
         _state = next;
+        if (next is RunState.Idle or RunState.Failed) _cbt.End();
+        else if (IsRunning) _cbt.Begin();
         _stateEnteredAt = DateTime.UtcNow;
         _stuck.Reset();
     }
@@ -5524,6 +5569,7 @@ internal sealed class RunController : IDisposable
 
     public void Dispose()
     {
+        _cbt.End();
         // プラグインを止める・外すときも、借りた設定は返す。
         //
         // 停止ボタンを押さずにプラグインを無効にすることもある。

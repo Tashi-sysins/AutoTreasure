@@ -88,6 +88,7 @@ internal sealed class RelayCoordinator : IDisposable
     private string? memberId;
     private string? roomCode;
     private string? joinToken;
+    private long nextInviteRefresh;
 
     internal RelayCoordinator(
         string url,
@@ -133,6 +134,10 @@ internal sealed class RelayCoordinator : IDisposable
     {
         if (!this.Connected || string.IsNullOrEmpty(line))
             return;
+
+        // AutoTreasure は停止中も定期的に生存通知を送る。その送信で招待の期限も延長する。
+        if (this.asLeader && Environment.TickCount64 >= this.nextInviteRefresh)
+            this.PublishInvite();
 
         _ = this.SendEnvelopeAsync(new RelayEnvelope
         {
@@ -254,7 +259,6 @@ internal sealed class RelayCoordinator : IDisposable
 
             if (string.IsNullOrWhiteSpace(this.currentInvite))
             {
-                this.status = "リーダーの準備を待っています";
                 return;
             }
         }
@@ -412,7 +416,7 @@ internal sealed class RelayCoordinator : IDisposable
                 //
                 //   捨てずにいると、同じ失敗を延々と繰り返す。
                 //   実際、参加側が「再接続中」のまま戻らなかった。
-                if (msg.ErrorCode is RelayError.ResumeInvalid or RelayError.RoomNotFound)
+                if (msg.ErrorCode is RelayError.ResumeInvalid or RelayError.RoomNotFound or RelayError.InviteInvalid)
                 {
                     this.memberId = null;
                     this.resumeToken = null;
@@ -467,7 +471,9 @@ internal sealed class RelayCoordinator : IDisposable
                     this.currentInvite = payload!.Invite;
                     this.status = "招待を受け取りました";
                 }
+                else this.status = "リーダーの招待情報を待っています";
             }
+            else this.status = "招待情報の応答を確認できません";
 
             try
             {
@@ -483,9 +489,9 @@ internal sealed class RelayCoordinator : IDisposable
         {
             throw;
         }
-        catch
+        catch (Exception ex)
         {
-            // 尋ねられなかった。次の機会に試す。
+            this.status = $"招待情報を取得できません: {Short(ex.Message)}";
         }
     }
 
@@ -496,6 +502,8 @@ internal sealed class RelayCoordinator : IDisposable
 
         if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(this.Invite))
             return;
+
+        this.nextInviteRefresh = Environment.TickCount64 + 60000;
 
         _ = this.SendEnvelopeAsync(new RelayEnvelope
         {

@@ -35,6 +35,39 @@ namespace AutoTreasure.IPC;
 /// </summary>
 internal static class LazyLootControl
 {
+    /// <summary>共有ファイルでは分からない各クライアントの実際の状態を読む。変更はしない。</summary>
+    internal static string Diagnostic()
+    {
+        if (!ShouldYield) return "未ロード";
+        try
+        {
+            var states = AppDomain.CurrentDomain.GetAssemblies()
+                .Where(a => a.GetName().Name == "LazyLoot")
+                .Select(a => a.GetType("LazyLoot.LazyLoot"))
+                .Where(t => t != null)
+                .Select((t, index) =>
+                {
+                    const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
+                    var config = t!.GetField("Config", flags)?.GetValue(null);
+                    if (config == null) return "Config 未取得";
+                    var fields = config.GetType().GetFields(BindingFlags.Public | BindingFlags.Instance)
+                        .Where(f => f.Name.StartsWith("Fulf") || f.Name.StartsWith("Restriction")
+                            || f.Name.StartsWith("WeeklyLockout") || f.Name == "NoPassEmergency")
+                        .Where(f => f.FieldType.IsPrimitive)
+                        .Select(f => $"{f.Name}={f.GetValue(config)}");
+                    // 無効化済みのアセンブリも残るため、番号を付けて混同を防ぐ。
+                    var restrictions = config.GetType().GetProperty("Restrictions")?.GetValue(config)
+                        ?? config.GetType().GetField("Restrictions")?.GetValue(config);
+                    var rules = System.Text.Json.JsonSerializer.Serialize(restrictions,
+                        new System.Text.Json.JsonSerializerOptions { IncludeFields = true });
+                    return $"実体{index + 1}: " + string.Join(", ", fields)
+                        + $", rules={rules}, rollOption={t.GetField("_rollOption", flags)?.GetValue(null)}";
+                });
+            return string.Join(" | ", states);
+        }
+        catch (Exception ex) { return $"読取失敗: {ex.Message}"; }
+    }
+
     private static object? _config;
     private static FieldInfo? _field;
     private static MethodInfo? _save;

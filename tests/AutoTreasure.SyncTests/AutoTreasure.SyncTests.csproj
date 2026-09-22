@@ -24,6 +24,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\..\AutoTreasure\IPC\TemporaryTweakSuppression.cs" Link="Production\TemporaryTweakSuppression.cs" />
     <!-- 本番の合図の形。Dalamud に依存していないのでそのまま取り込める。 -->
     <Compile Include="..\..\AutoTreasure\Sync\SyncMessage.cs"
              Link="Production\SyncMessage.cs" />

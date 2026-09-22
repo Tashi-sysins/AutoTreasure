@@ -34,6 +34,7 @@ public sealed class Plugin : IDalamudPlugin
 
     /// <summary>手で遊んでいる間の様子を残すための記録。</summary>
     private readonly RunLog _log = new();
+    private readonly IPC.LazyLootDiagnostics _lootDiagnostics;
 
     /// <summary>
     /// 取り込んだ経路探索。
@@ -84,6 +85,7 @@ public sealed class Plugin : IDalamudPlugin
         Logic.ActionHelper.Log = _log;
         _controller = new RunController(_log);
         _observer = new RunObserver(_log);
+        _lootDiagnostics = new IPC.LazyLootDiagnostics(message => _log.Write(message));
         _mainWindow = new MainWindow(_controller, _log, _observer, StartWithConfirm);
         _statusBar = new Windows.StatusBarEntry(_controller, OpenMain);
         _windows.AddWindow(_mainWindow);
@@ -247,6 +249,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        _lootDiagnostics.Dispose();
         Svc.Commands.RemoveHandler(CmdMain);
 
         Svc.Framework.Update -= OnFrameworkUpdate;

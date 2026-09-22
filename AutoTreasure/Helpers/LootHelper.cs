@@ -109,6 +109,21 @@ internal static unsafe class LootHelper
         return false;
     }
 
+    /// <summary>LazyLoot と比較するための読取専用スナップショット。ロット操作はしない。</summary>
+    internal static string Diagnostic()
+    {
+        var loot = Loot.Instance();
+        if (loot == null) return "loot=null";
+        var text = new System.Text.StringBuilder();
+        for (var i = 0; i < loot->Items.Length; i++)
+        {
+            var item = loot->Items[i];
+            if (item.ItemId == 0 || item.ChestObjectId is 0 or 0xE0000000) continue;
+            text.Append($" slot={i}/item={item.ItemId}/state={item.RollState}/result={item.RollResult}/mode={item.LootMode}/weekly={item.WeeklyLootItem};");
+        }
+        return text.Length == 0 ? "loot=なし" : text.ToString();
+    }
+
     /// <summary>
     /// 出ているロットを1件だけ処理する。
     ///

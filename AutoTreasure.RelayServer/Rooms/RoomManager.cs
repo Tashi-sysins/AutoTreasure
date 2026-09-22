@@ -138,12 +138,20 @@ public sealed class RoomManager(InviteBoard invites, ILogger<RoomManager> log)
                 leader.Character = who.Character;
                 leader.ContentId = who.ContentId;
 
+                // プラグイン再読み込みではクライアントに鍵が残っていない。
+                // ハッシュから元の鍵は復元できないので、新しい鍵を渡す。
+                var joinToken = RoomCode.NewToken();
+                var resumeToken = RoomCode.NewToken();
+                room.JoinTokenHash = RoomCode.Hash(joinToken);
+                leader.ResumeTokenHash = RoomCode.Hash(resumeToken);
+
                 log.LogInformation(
                     "取りまとめ役が戻りました {Code}（{Character}）{Count}/{Max}",
                     room.RoomCode, Safe(who.Character),
                     room.Members.Count, RoomState.MaxMembers);
 
-                return new RoomResult(true, Room: room, Member: leader);
+                return new RoomResult(true, Room: room, Member: leader,
+                    JoinToken: joinToken, ResumeToken: resumeToken);
             }
             finally
             {
