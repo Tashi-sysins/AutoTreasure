@@ -53,6 +53,17 @@ internal sealed class RunController : IDisposable
     /// </summary>
     private const double ChestTimeoutSeconds = 90.0;
 
+    /// <summary>
+    /// 経路が引けないとき、まっすぐ歩いてよい距離。
+    ///
+    /// これより遠いと、障害物を無視して突っ込むことになる。
+    /// 掘ったあとの宝箱は目の前にあるので、この程度で足りる。
+    /// </summary>
+    private const float DirectWalkRange = 25f;
+
+    /// <summary>まっすぐ歩くまでに、経路で試す時間。</summary>
+    private const double DirectWalkAfterSeconds = 8.0;
+
     /// <summary>ロットの処理にかける上限。</summary>
     private const double RollTimeoutSeconds = 60.0;
 
@@ -2450,6 +2461,26 @@ internal sealed class RunController : IDisposable
             {
                 MovementHelper.Stop();
                 Record($"宝箱に近づけないので、経路を引き直します（残り {distance:F1}m）");
+            }
+
+            // それでも近づけないなら、最後の手段としてまっすぐ歩く。
+            //
+            // なぜ要るか（2026-09-22 実測）:
+            //   地図役が地形の外（岩の上など）で掘ると、経路を引けず
+            //   13.5m の位置から一歩も動けなかった。
+            //   他の3人は宝箱の前で待っており、地図役だけが取り残される。
+            //
+            //   宝箱はすぐそこに見えている。経路が引けなくても、
+            //   向きを合わせて歩けば届く距離。
+            //
+            // ⚠ 遠いうちはやらない。障害物を無視して突っ込むことになる。
+            //   経路で近づけなかった近距離のときだけの逃げ道。
+            if (!moving && distance <= DirectWalkRange && SecondsInState > DirectWalkAfterSeconds)
+            {
+                RecordEvery("chest-direct", 5,
+                    $"経路の判定を飛ばして、宝箱へ直接向かわせます（残り {distance:F1}m）");
+
+                IPC.VNavmesh.PathfindAndMoveCloseTo(chest.Position, false, 2f);
             }
 
             // 近づけないまま時間が過ぎたら、そのことを残して次へ。

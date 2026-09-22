@@ -26,6 +26,18 @@ internal static unsafe class MovementHelper
     /// </summary>
     private const float MeshFootTolerance = 10f;
 
+    /// <summary>
+    /// 足元に地形が無い状態を、これだけ見送る。
+    ///
+    /// ワープ床の運搬は実測2.7秒で終わる。
+    /// それを十分に越えても外れないなら、運搬ではなく
+    /// 地形の外に立っているだけなので、見送るのをやめる。
+    /// </summary>
+    private const double OffMeshGiveUpSeconds = 6.0;
+
+    /// <summary>足元に地形が無くなった時刻。戻ったら消す。</summary>
+    private static DateTime _offMeshSince = DateTime.MinValue;
+
     /// <summary>マウントを呼び出す／降りる（マウントルーレット）。</summary>
     private const uint GeneralActionMountRoulette = 9;
 
@@ -401,10 +413,32 @@ internal static unsafe class MovementHelper
         // 飛行中は地形から高く離れるので、ここで弾くと
         // フィールドの移動そのものができなくなる。
         // 見たいのは「ワープ床で運ばれている最中」だけ。
+        //
+        // ⚠ ただし<b>見送り続けてはいけない</b>（2026-09-22 実測）。
+        //   地図役が岩の上など地形の無い場所で掘ると、
+        //   宝箱まで13.5mの位置から<b>一歩も動けないまま</b>になった。
+        //   他の3人は同じ場所から普通に歩けており、
+        //   この機だけが足元を地形の外と判定されていた。
+        //
+        //   運搬は実測2.7秒で終わる。数秒待っても外れないなら
+        //   それは運搬ではなく、ただ地形の外に立っているだけ。
+        //   その場合は<b>断らずに経路を頼む</b>。
+        //   vnavmesh は近くの地形へ寄せてくれるので、動き出せる。
         if (!PlayerHelper.IsFlying
             && !VNavmesh.IsPointOnMesh(PlayerHelper.Position, MeshFootTolerance, true))
         {
-            return Refuse("自分の足元に地形がありません（運ばれている最中など）");
+            if (_offMeshSince == DateTime.MinValue)
+                _offMeshSince = DateTime.UtcNow;
+
+            // 運搬が終わるまでの猶予だけ見送る。
+            if ((DateTime.UtcNow - _offMeshSince).TotalSeconds < OffMeshGiveUpSeconds)
+                return Refuse("自分の足元に地形がありません（運ばれている最中など）");
+
+            // 猶予を過ぎた。運搬ではないので、頼んでみる。
+        }
+        else
+        {
+            _offMeshSince = DateTime.MinValue;
         }
 
         // 経路探索中、または経路に沿って移動中なら、そのまま任せる。
